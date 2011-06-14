@@ -5,45 +5,47 @@ require 'yaml'
 require 'base64'
 require 'rake/clean'
 
-# Dynamically build tasks for all directories in cookbooks/*
-def cookbook_list
-  @cookbook_list ||= FileList['cookbooks/*'].map do |cookbook_path|
+def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
+  $stdout.puts "Starting build cookbook tasks: #{manifest}"
+  upstream_cookbook_list(manifest, scope)
+  @cookbook_list.collect do |cookbook|
+    cookbook_path = File.join(Rake.original_dir, 'cookbooks', cookbook)
     if File.directory?(cookbook_path)
-      cookbook = cookbook_path.split("/").last
+      $stdout.puts "  Build Rake task: tmp/#{cookbook}"
 
       file "tmp/#{cookbook}" do
+        $stdout.puts "  Cloning #{cookbook}"
         git "clone --no-hardlinks cookbooks tmp/#{cookbook}"
-        Dir.chdir("#{Rake.original_dir}/tmp/#{cookbook}")
-        git "filter-branch --subdirectory-filter #{cookbook} HEAD -- --all"
-        git "reset --hard"
-        git "gc --aggressive"
-        git "prune"
+        Dir.chdir("#{Rake.original_dir}/tmp/#{cookbook}") do
+          puts `pwd`
+          $stdout.puts "  Extracting #{cookbook}"
+          git "filter-branch --subdirectory-filter #{cookbook} HEAD -- --all"
+          git "reset --hard"
+          git 'reflog expire --expire=now --all'
+          git 'repack -ad'
+          git "gc --aggressive --prune=now"
 
-        create_repo(cookbook) unless repo_exists?(cookbook)
+          create_repo(cookbook) unless repo_exists?(cookbook)
 
-        # check for existing tags
-        git "remote rm origin"
-        git "remote add cookbooks git@github.com:#{config['org']}/#{cookbook}.git"
-        git "fetch cookbooks"
+          # check for existing tags
+          git "remote rm origin"
+          git "remote add cookbooks git@github.com:#{config['org']}/#{cookbook}.git"
+          git "fetch cookbooks"
 
-        # tag versions
-        revisions = git_output "rev-list --topo-order --branches"
-        version = nil
-        revisions.split(/\n/).each do |rev|
-          metadata = parse_metadata(cookbook, rev)
-          if metadata['version'] && metadata['version'] != version
-            version = metadata['version']
-            puts "tagging #{rev} as #{version}"
-            git "tag -a #{version}  -m 'Chef cookbook #{cookbook} version: #{version}' #{rev}"
+          # tag versions
+          revisions = git_output "rev-list --topo-order --branches"
+          version = nil
+          revisions.split(/\n/).each do |rev|
+            metadata = parse_metadata(cookbook, rev)
+            if metadata['version'] && metadata['version'] != version
+              version = metadata['version']
+              puts "tagging #{rev} as #{version}"
+              git "tag -a #{version}  -m 'Chef cookbook #{cookbook} version: #{version}' #{rev}"
+            end
           end
+          git "push --tags cookbooks master"
         end
 
-        # push!
-        git "push --tags cookbooks master"
-        Dir.chdir(Rake.original_dir)
-
-        CLEAN.include('tmp/*')
-        Rake::Task['clean'].invoke
       end
 
       cookbook
@@ -63,6 +65,14 @@ def config
   @config ||= YAML.load_file(File.join(Rake.original_dir, 'config.yml'))
 end
 
+def upstream_cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
+  $stdout.puts "Starting build cookbook list from manifest: #{manifest}"
+  @cookbook_list = YAML.load_file(File.join(Rake.original_dir, manifest))
+  unless scope == 'all'
+    @cookbook_list = @cookbook_list.find_all{|ckbk| ckbk == scope}
+  end
+end
+
 def post(uri, payload)
   sleep 1 # github api throttlin'
   basic_auth = Base64.encode64("#{config['login']}/token:#{config['token']}").gsub("\n", '')
@@ -77,11 +87,24 @@ def get(uri)
   JSON.parse(RestClient.get(uri, headers))
 end
 
+def upstream_clone
+  Dir.chdir(Rake.original_dir) do |path|
+    git "clone --verbose --progress git://github.com/#{@upstream}/#{@repository}.git cookbooks"
+  end
+end
+
+def cleanup_clone
+  Dir.chdir(Rake.original_dir) do |path|
+    FileUtils.rm_rf('cookbooks') if Dir.exist?('cookbooks')
+  end
+  @deep_clone = nil
+end
+
 def create_repo(name)
   repo_info = {
     :public      => 1,
     :name        => "#{config['org']}/#{name}",
-    :description => "A Chef cookbook for #{name}",
+    :description => "A Chef cookbook for #{name} (Initial Upstream: #{@upstream}, Repository: #{@repository})",
     :homepage    => "https://github.com/opscode/cookbooks/blob/master/LICENSE"
   }
   post "https://github.com/api/v2/json/repos/create", repo_info
@@ -107,40 +130,74 @@ def parse_metadata(cookbook, rev)
   metadata
 end
 
-task :submodule do
-  git "submodule update --init"
-  Dir.chdir("#{Rake.original_dir}/cookbooks")
-  git "pull origin master"
-  Dir.chdir(Rake.original_dir)
-  git "commit cookbooks -m 'updated upstream cookbooks at #{`date`.chomp}'"
-  git "push origin master"
+def parse_manifest(manifest)
+  @upstream, @repository = manifest.sub(/^upstream\//, '').sub(/\.yml$/, '').split('_-_')
 end
 
-desc "Update all cookbooks in Opscode's Chef Cookbooks repository."
-task :default => [:submodule, :create_tasks] do
+def update_single(cookbook)
+  Rake::Task[:create_tasks].invoke(cookbook)
+  Rake::Task["tmp/#{cookbook}"].invoke
+end
+
+def update_all
   begin
-    cookbook_list.each { |cookbook| Rake::Task["tmp/#{cookbook}"].invoke }
+    #TODO: Refactor to loop over a file glob of rake tasks in tmp folder.
+    $stdout.puts "Starting update all."
+    Dir.chdir(Rake.original_dir) do |path|
+      FileList["upstream/*.yml"].collect do |manifest|
+        $stdout.puts "Starting parse manifest: #{manifest}"
+        parse_manifest(manifest)
+        upstream_clone
+        cookbook_list(manifest).each do |cookbook|
+          $stdout.puts "  Starting update: #{cookbook}"
+          update_single(cookbook)
+        end
+        cleanup_clone
+      end
+    end
   ensure
-    Rake::Task['clean'].invoke
   end
 end
 
-task :create_tasks do
-  cookbook_list
+task :clone_clean do
+  cleanup_clone()
+end
+
+desc "Update all cookbooks in Opscode's Chef Cookbooks repository."
+task :default => [:submodule] do |tsk|
+  begin
+    update_all
+  ensure
+  end
+end
+
+task :create_tasks, [:cookbook] do |tsk, args|
+  args.with_defaults(:cookbook => 'all')
+  Dir.chdir(Rake.original_dir) do |path|
+    FileList["upstream/*.yml"].collect do |manifest|
+      $stdout.puts "Processing Cookbook manifest: #{manifest} "
+      parse_manifest(manifest)
+      upstream_clone unless Dir.exist? 'cookbooks'
+      cookbook_list(manifest, args[:cookbook])
+    end
+  end
 end
 
 desc "Update specific cookbook (default: all) from Opscode's Chef Cookbooks repository."
-task :update, [:cookbook] => [:submodule, :create_tasks] do |tsk, args|
+task :update, [:cookbook] => [:clone_clean] do |tsk, args|
   begin
     args.with_defaults(:cookbook => 'all')
+    $stdout.puts "Starting update: #{args.inspect} "
     if args[:cookbook] == 'all'
-      cookbook_list.each { |cookbook| Rake::Task["tmp/#{cookbook}"].invoke }
+      update_all
     else
-      Rake::Task["tmp/#{args[:cookbook]}"].invoke
+      update_single(args[:cookbook])
     end
   ensure
     CLEAN.include('tmp/*')
+    Rake::Task['clone_clean'].invoke
     Rake::Task['clean'].invoke
+    cleanup_clone()
   end
 end
 
