@@ -164,7 +164,7 @@ task :clone_clean do
 end
 
 desc "Update all cookbooks in Opscode's Chef Cookbooks repository."
-task :default => [:submodule] do |tsk|
+task :default do |tsk|
   begin
     update_all
   ensure
