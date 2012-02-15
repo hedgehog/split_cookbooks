@@ -6,6 +6,7 @@ GEM
       bunny (>= 0.6.0)
       erubis
       highline
+      json (>= 1.4.4, <= 1.5.2)
       json (>= 1.4.4, <= 1.6.1)
       mixlib-authentication (>= 1.1.0)
       mixlib-cli (>= 1.1.0)

@@ -13,12 +13,15 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
     cookbook_path = File.join(Rake.original_dir, 'cookbooks', cookbook)
     if File.directory?(cookbook_path)
       $stdout.puts "  Build Rake task: tmp/#{cookbook}"
+      puts "#{Rake.original_dir}/tmp/#{cookbook}"
+      puts File.directory?("#{Rake.original_dir}/tmp/#{cookbook}").inspect
 
       unless File.directory?("#{Rake.original_dir}/tmp/#{cookbook}")
 
         file "tmp/#{cookbook}" do
           $stdout.puts "  Cloning #{cookbook}"
           git "clone --no-hardlinks cookbooks tmp/#{cookbook}"
+          puts File.directory?("#{Rake.original_dir}/tmp/#{cookbook}")
           Dir.chdir("#{Rake.original_dir}/tmp/#{cookbook}") do
             puts `pwd`
             $stdout.puts "  Extracting #{cookbook}"
@@ -46,19 +49,27 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
                 git "tag -a #{version}  -m 'Chef cookbook #{cookbook} version: #{version}' #{rev}"
               end
             end
-            git "push --tags cookbooks master"
+            git "config --add remote.origin.push '+refs/heads/*:refs/heads/*'"
+            git "config --add remote.origin.push '+refs/tags/*:refs/tags/*'"
+            git "push cookbooks master"
           end
         end
 
       end
 
-      cookbook
+      puts cookbook
+      Rake::Task["tmp/#{cookbook}"].execute
     end
   end.reject { |c| c.nil? }
 end
 
 def git(command)
-  system %{git #{command}}
+  begin
+    system %{git #{command}}
+  rescue => e
+    puts e.inspect
+    puts caller.join('/n')
+  end
 end
 
 def git_output(command)
@@ -70,10 +81,18 @@ def config
 end
 
 def upstream_cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
-  $stdout.puts "Starting build cookbook list from manifest: #{manifest}"
-  @cookbook_list = YAML.load_file(File.join(Rake.original_dir, manifest))
-  unless scope == 'all'
-    @cookbook_list = @cookbook_list.find_all{|ckbk| ckbk == scope}
+  if @repository
+    $stdout.puts "Starting build cookbook list from manifest: #{manifest}"
+    @cookbook_list = YAML.load_file(File.join(Rake.original_dir, manifest))
+    unless scope == 'all'
+      @cookbook_list = @cookbook_list.find_all{|ckbk| ckbk == scope}
+    end
+  else
+    $stdout.puts "Starting build cookbook list from manifest: #{manifest}"
+    @cookbook_list = YAML.load_file(File.join(Rake.original_dir, manifest))
+    unless scope == 'all'
+      @cookbook_list = @cookbook_list.find_all{|ckbk| ckbk == scope}
+    end
   end
 end
 
@@ -96,7 +115,15 @@ end
 
 def upstream_clone
   Dir.chdir(Rake.original_dir) do |path|
-    git "clone --verbose --progress git://github.com/#{@upstream}/#{@repository}.git cookbooks"
+    if @repository
+      puts "  Cloning upstream #{@upstream}/#{@repository}.git"
+      git "clone --verbose --progress git://github.com/#{@upstream}/#{@repository}.git cookbooks"
+    else
+      @repositories.each do |repo|
+        puts "  Cloning upstream #{@upstream}/#{repo}.git"
+        git "clone --verbose --progress git://github.com/#{@upstream}/#{repo}.git cookbooks/#{repo}"
+      end
+    end
   end
 end
 
@@ -152,13 +179,19 @@ def parse_metadata(cookbook, rev)
   metadata
 end
 
-def parse_manifest(manifest)
-  @upstream, @repository = manifest.sub(/^upstream\//, '').sub(/\.yml$/, '').split('_-_')
+def parse_manifest(manifest, single_repo=false)
+  if single_repo
+    @upstream = manifest.sub(/^upstream\/singles\//, '').sub(/\.yml$/, '')
+    @repository = false
+    @repositories = YAML.load_file(File.join(Rake.original_dir, manifest))
+  else
+    @upstream, @repository = manifest.sub(/^upstream\//, '').sub(/\.yml$/, '').split('_-_')
+  end
 end
 
 def update_single(cookbook)
   Rake::Task[:create_tasks].invoke(cookbook)
-  Rake::Task["tmp/#{cookbook}"].invoke
+  puts "="*80
 end
 
 def update_all
@@ -171,7 +204,17 @@ def update_all
         parse_manifest(manifest)
         upstream_clone
         cookbook_list(manifest).each do |cookbook|
-          $stdout.puts "  Starting update: #{cookbook}"
+          $stdout.puts "  Starting update_all cookbooks collective update: #{cookbook}"
+          update_single(cookbook)
+        end
+        cleanup_clone
+      end
+      FileList["upstream/singles/*.yml"].collect do |manifest|
+        $stdout.puts "Starting parse manifest: #{manifest}"
+        parse_manifest(manifest, true)
+        upstream_clone
+        cookbook_list(manifest).each do |cookbook|
+          $stdout.puts "  Starting update_all cookbooks singular update: #{cookbook}"
           update_single(cookbook)
         end
         cleanup_clone
@@ -199,12 +242,12 @@ end
 
 task :create_tasks, [:cookbook] do |tsk, args|
   args.with_defaults(:cookbook => 'all')
+  cookbook=args[:cookbook]
   Dir.chdir(Rake.original_dir) do |path|
     FileList["upstream/*.yml"].collect do |manifest|
       $stdout.puts "Processing Cookbook manifest: #{manifest} "
       parse_manifest(manifest)
       upstream_clone unless Dir.exist? 'cookbooks'
-      cookbook_list(manifest, args[:cookbook])
     end
   end
 end
@@ -217,6 +260,7 @@ task :update, [:cookbook] => [:clone_clean] do |tsk, args|
     if args[:cookbook] == 'all'
       update_all
     else
+      @single = true
       update_single(args[:cookbook])
     end
   ensure

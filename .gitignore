@@ -1,6 +1,10 @@
+*.log
+bin/
 config.yml
 bin/
 tmp/
 *.log
 cookbooks/
 vendor/
+.idea/
+tmp/
