@@ -20,12 +20,19 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
 
         file "tmp/#{cookbook}" do
           $stdout.puts "  Cloning #{cookbook}"
-          git "clone --no-hardlinks cookbooks tmp/#{cookbook}"
+          if @singles
+            git "clone --no-hardlinks cookbooks/#{cookbook} tmp/#{cookbook}"
+          else
+            git "clone --no-hardlinks cookbooks tmp/#{cookbook}"
+          end
           puts File.directory?("#{Rake.original_dir}/tmp/#{cookbook}")
           Dir.chdir("#{Rake.original_dir}/tmp/#{cookbook}") do
             puts `pwd`
             $stdout.puts "  Extracting #{cookbook}"
-            git "filter-branch --subdirectory-filter #{cookbook} HEAD -- --all"
+            if @singles
+            else
+              git "filter-branch --subdirectory-filter #{cookbook} HEAD -- --all"
+            end
             git "reset --hard"
             git 'reflog expire --expire=now --all'
             git 'repack -ad'
@@ -210,6 +217,7 @@ def update_all
         cleanup_clone
       end
       FileList["upstream/singles/*.yml"].collect do |manifest|
+        @singles = true
         $stdout.puts "Starting parse manifest: #{manifest}"
         parse_manifest(manifest, true)
         upstream_clone
