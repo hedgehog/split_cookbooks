@@ -177,6 +177,9 @@ def create_repo(name)
   team_info = {:team => { :name => "#{@abreviation}-#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] } }
   sleep 1
   create_team_result = post create_team_uri, team_info
+  team_info2 = {:team => { :name => "#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] } }
+  sleep 1
+  create_team_result = post create_team_uri, team_info2
   # team_id = create_team_result['team']['id']
   # add_team_member_uri = "https://github.com/api/v2/json/teams/#{team_id}/members?name=#{config['login']}"
   # add_team_member_result = post add_team_member_uri
