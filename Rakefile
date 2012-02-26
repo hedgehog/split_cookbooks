@@ -12,26 +12,30 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
   @cookbook_list.collect do |cookbook|
     cookbook_path = File.join(Rake.original_dir, 'cookbooks', cookbook)
     if File.directory?(cookbook_path)
-      $stdout.puts "  Build Rake task: tmp/#{cookbook}"
-      puts "#{Rake.original_dir}/tmp/#{cookbook}"
-      puts File.directory?("#{Rake.original_dir}/tmp/#{cookbook}").inspect
+      $stdout.puts "  Build Rake task: tmp/#{@abreviation}-#{cookbook}"
+      puts "#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}"
+      puts File.directory?("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}").inspect
 
-      unless File.directory?("#{Rake.original_dir}/tmp/#{cookbook}")
+      unless File.directory?("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}")
 
-        file "tmp/#{cookbook}" do
+        file "tmp/#{@abreviation}-#{cookbook}" do
           $stdout.puts "  Cloning #{cookbook}"
           if @singles
-            git "clone --no-hardlinks cookbooks/#{cookbook} tmp/#{cookbook}"
+            git "clone --no-hardlinks cookbooks/#{cookbook} tmp/#{@abreviation}-#{cookbook}"
           else
-            git "clone --no-hardlinks cookbooks tmp/#{cookbook}"
+            git "clone --no-hardlinks cookbooks tmp/#{@abreviation}-#{cookbook}"
           end
-          puts File.directory?("#{Rake.original_dir}/tmp/#{cookbook}")
-          Dir.chdir("#{Rake.original_dir}/tmp/#{cookbook}") do
+          puts File.directory?("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}")
+          Dir.chdir("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}") do
             puts `pwd`
             $stdout.puts "  Extracting #{cookbook}"
             if @singles
             else
-              git "filter-branch --subdirectory-filter #{cookbook} HEAD -- --all"
+              if @folder
+                git "filter-branch --subdirectory-filter #{@folder}/#{cookbook} HEAD -- --all"
+              else
+                git "filter-branch --subdirectory-filter #{cookbook} HEAD -- --all"
+              end
             end
             git 'reset --hard'
             git 'reflog expire --expire=now --all'
@@ -74,7 +78,7 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
       end
 
       puts cookbook
-      Rake::Task["tmp/#{cookbook}"].execute
+      Rake::Task["tmp/#{@abreviation}-#{cookbook}"].execute
     end
   end.reject { |c| c.nil? }
 end
@@ -205,13 +209,20 @@ def parse_metadata(cookbook, rev)
 end
 
 def parse_manifest(manifest, single_repo=false)
+  @folder = false
   if single_repo
     @abreviation, @upstream = manifest.sub(/^upstream\/singles\//, '').sub(/\.yml$/, '').split('_-_')
     @repository = false
     @repositories = YAML.load_file(File.join(Rake.original_dir, manifest))
   else
     @repository = true
-    @abreviation, @upstream, @repository = manifest.sub(/^upstream\//, '').sub(/\.yml$/, '').split('_-_')
+    ary = manifest.sub(/^upstream\//, '').sub(/\.yml$/, '').split('_-_')
+    case ary.size
+      when 3
+        @abreviation, @upstream, @repository = ary
+      when 4
+        @abreviation, @upstream, @repository, @folder = ary
+    end
   end
 end
 

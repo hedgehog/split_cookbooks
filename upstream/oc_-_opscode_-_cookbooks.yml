@@ -1,3 +1,4 @@
+- 7-zip
 - activemq
 - ant
 - apache2
@@ -33,6 +34,7 @@
 - hadoop
 - haproxy
 - heartbeat
+- iis
 - imagemagick
 - iptables
 - java
@@ -82,7 +84,9 @@
 - samba
 - sbuild
 - screen
+- selinux
 - snort
+- sql_server
 - sqlite
 - ssh_known_hosts
 - stompserver
@@ -96,10 +100,14 @@
 - transmission
 - ubuntu
 - ucspi-tcp
+- ufw
 - unicorn
 - users
 - varnish
 - vim
+- webpi
+- windows
+- wix
 - wordpress
 - xfs
 - xml
