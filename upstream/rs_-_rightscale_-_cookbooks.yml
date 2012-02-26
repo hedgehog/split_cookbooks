@@ -1,3 +1,10 @@
 - apache2
 - git
 - iptables
+- logrotate
+- mysql
+- openssl
+- passenger_apache2
+- rails
+- rails_enterprise
+- runit
