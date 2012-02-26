@@ -168,7 +168,7 @@ def create_repo(name)
     :public      => 1,
     :name        => "#{config['org']}/#{@abreviation}-#{name}",
     :description => "A Chef cookbook for #{name} (Initial Upstream: #{@upstream}, Repository: #{@repository||name})",
-    :homepage    => "https://github.com/opscode/cookbooks/blob/master/LICENSE"
+    :homepage    => "https://github.com/#{@upstream}/#{@repository||repo}"
   }
   create_repo_uri = "https://github.com/api/v2/json/repos/create"
   create_repo_result = post create_repo_uri, repo_info
