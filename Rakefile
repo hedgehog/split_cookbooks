@@ -33,17 +33,17 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
             else
               git "filter-branch --subdirectory-filter #{cookbook} HEAD -- --all"
             end
-            git "reset --hard"
+            git 'reset --hard'
             git 'reflog expire --expire=now --all'
             git 'repack -ad'
-            git "gc --aggressive --prune=now"
+            git 'gc --aggressive --prune=now'
 
             create_repo(cookbook) unless repo_exists?(cookbook)
 
             # check for existing tags
-            git "remote rm origin"
-            git "remote add cookbooks git@github.com:#{config['org']}/#{cookbook}.git"
-            git "fetch cookbooks"
+            git 'remote rm origin'
+            git "remote add cookbooks git@github.com:#{config['org']}/#{@abreviation}-#{cookbook}.git"
+            git 'fetch cookbooks'
 
             # tag versions
             revisions = git_output "rev-list --topo-order --branches"
@@ -53,12 +53,21 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
               if metadata['version'] && metadata['version'] != version
                 version = metadata['version']
                 puts "tagging #{rev} as #{version}"
-                git "tag -a #{version}  -m 'Chef cookbook #{cookbook} version: #{version}' #{rev}"
+                git "tag -a #{version}  -m 'Chef cookbook #{@abreviation}-#{cookbook} version: #{version}' #{rev}"
               end
             end
-            git "config --add remote.origin.push '+refs/heads/*:refs/heads/*'"
-            git "config --add remote.origin.push '+refs/tags/*:refs/tags/*'"
-            git "push cookbooks master"
+            git 'config --add remote.cookbooks.push "+refs/heads/*:refs/heads/*"'
+            git 'config --add remote.cookbooks.push "+refs/tags/*:refs/tags/*"'
+            git 'push cookbooks'
+            result = `git ls-remote --heads cookbooks|grep refs/heads/qa`
+            if $? == 0
+              # TODO: Add rebase dry-run test and then dry run is it will be clean.
+              #
+            else
+              puts 'Creating the qa branch.'
+              git 'checkout -b qa'
+              git 'push -u cookbooks qa'
+            end
           end
         end
 
@@ -88,7 +97,8 @@ def config
 end
 
 def upstream_cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
-  if @repository
+  # Test if cookbook silo or single cookbook repositories.
+  if @repository && !@singles
     $stdout.puts "Starting build cookbook list from manifest: #{manifest}"
     @cookbook_list = YAML.load_file(File.join(Rake.original_dir, manifest))
     unless scope == 'all'
@@ -110,7 +120,15 @@ def post(uri, payload)
   puts "URI: #{uri}"
   puts "JSON payload: #{payload.to_json}"
   puts "Headers: #{headers}"
-  JSON.parse(RestClient.post(uri, payload.to_json, headers))
+  begin
+  json_response = RestClient.post(uri, payload.to_json, headers)
+  rescue RestClient::UnprocessableEntity => e
+    # we ignore cases where the team already exists.  We are expected to delete
+    #repos we wan to create but not teams.
+    raise(e) unless e.message[/422 Unprocessable Entity/]
+  end
+  puts "Respone: #{json_response}"
+  json_response.nil? ? "{}".to_json : JSON.parse(json_response)
 end
 
 def get(uri)
@@ -123,11 +141,11 @@ end
 def upstream_clone
   Dir.chdir(Rake.original_dir) do |path|
     if @repository
-      puts "  Cloning upstream #{@upstream}/#{@repository}.git"
+      puts "  Cloning upstream #{@upstream}/#{@repository}.git to cookbooks"
       git "clone --verbose --progress git://github.com/#{@upstream}/#{@repository}.git cookbooks"
     else
       @repositories.each do |repo|
-        puts "  Cloning upstream #{@upstream}/#{repo}.git"
+        puts "  Cloning upstream #{@upstream}/#{repo}.git to cookbooks/#{repo}"
         git "clone --verbose --progress git://github.com/#{@upstream}/#{repo}.git cookbooks/#{repo}"
       end
     end
@@ -144,16 +162,16 @@ end
 def create_repo(name)
   repo_info = {
     :public      => 1,
-    :name        => "#{config['org']}/#{name}",
-    :description => "A Chef cookbook for #{name} (Initial Upstream: #{@upstream}, Repository: #{@repository})",
+    :name        => "#{config['org']}/#{@abreviation}-#{name}",
+    :description => "A Chef cookbook for #{name} (Initial Upstream: #{@upstream}, Repository: #{@repository||name})",
     :homepage    => "https://github.com/opscode/cookbooks/blob/master/LICENSE"
   }
   create_repo_uri = "https://github.com/api/v2/json/repos/create"
   create_repo_result = post create_repo_uri, repo_info
   puts create_repo_result.inspect
   create_team_uri = "https://github.com/api/v2/json/organizations/#{config['org']}/teams/"
-  team_info = {:team => { :name => name, :permission => 'push', :repo_names => ["#{config['org']}/#{name}"] } }
-  sleep 5
+  team_info = {:team => { :name => "#{@abreviation}-#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] } }
+  sleep 1
   create_team_result = post create_team_uri, team_info
   # team_id = create_team_result['team']['id']
   # add_team_member_uri = "https://github.com/api/v2/json/teams/#{team_id}/members?name=#{config['login']}"
@@ -165,7 +183,7 @@ end
 def repo_exists?(name)
   repo = true
   begin
-    repositories = get("https://github.com/api/v2/json/repos/show/#{config['org']}/#{name}")
+    repositories = get("https://github.com/api/v2/json/repos/show/#{config['org']}/#{@abreviation}-#{name}")
   rescue RestClient::Exception => e
     repo = false if e.http_body[/Repository not found/]
   end
@@ -188,11 +206,12 @@ end
 
 def parse_manifest(manifest, single_repo=false)
   if single_repo
-    @upstream = manifest.sub(/^upstream\/singles\//, '').sub(/\.yml$/, '')
+    @abreviation, @upstream = manifest.sub(/^upstream\/singles\//, '').sub(/\.yml$/, '').split('_-_')
     @repository = false
     @repositories = YAML.load_file(File.join(Rake.original_dir, manifest))
   else
-    @upstream, @repository = manifest.sub(/^upstream\//, '').sub(/\.yml$/, '').split('_-_')
+    @repository = true
+    @abreviation, @upstream, @repository = manifest.sub(/^upstream\//, '').sub(/\.yml$/, '').split('_-_')
   end
 end
 
@@ -207,6 +226,7 @@ def update_all
     $stdout.puts "Starting update all."
     Dir.chdir(Rake.original_dir) do |path|
       FileList["upstream/*.yml"].collect do |manifest|
+        @singles = false
         $stdout.puts "Starting parse manifest: #{manifest}"
         parse_manifest(manifest)
         upstream_clone
