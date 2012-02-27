@@ -10,7 +10,12 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
   $stdout.puts "Starting build cookbook tasks: #{manifest}"
   upstream_cookbook_list(manifest, scope)
   @cookbook_list.collect do |cookbook|
-    cookbook_path = File.join(Rake.original_dir, 'cookbooks', cookbook)
+    if @folder
+      cookbook_path = File.join(Rake.original_dir, 'cookbooks', @folder, cookbook)
+    else
+      cookbook_path = File.join(Rake.original_dir, 'cookbooks', cookbook)
+    end
+    puts "Looking for: #{cookbook_path}"
     if File.directory?(cookbook_path)
       $stdout.puts "  Build Rake task: tmp/#{@abreviation}-#{cookbook}"
       puts "#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}"
@@ -206,7 +211,9 @@ def parse_metadata(cookbook, rev)
     metadata = JSON.parse(git_output("show #{rev}:metadata.json"))
   rescue
     git "reset -q #{rev} metadata.rb"
-    `knife cookbook metadata from file metadata.rb`
+    if ::File.exist?('metadata.rb')
+      `knife cookbook metadata from file metadata.rb`
+    end
     if ::File.exist?('metadata.json')
       metadata= JSON.parse(::File.read('metadata.json'))
       puts "Cookbook #{cookbook} Git revision #{rev} is version #{metadata['version']}"
