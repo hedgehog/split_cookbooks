@@ -77,9 +77,11 @@ def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
 
       end
 
-      puts cookbook
+      puts "Execute rake task: tmp/#{@abreviation}-#{cookbook}"
       Rake::Task["tmp/#{@abreviation}-#{cookbook}"].execute
     end
+    puts "Delete: #{cookbook_path}"
+    FileUtils.rm_rf(cookbook_path)
   end.reject { |c| c.nil? }
 end
 
@@ -103,18 +105,20 @@ end
 def upstream_cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
   # Test if cookbook silo or single cookbook repositories.
   if @repository && !@singles
-    $stdout.puts "Starting build cookbook list from manifest: #{manifest}"
+    $stdout.puts "Starting build collected cookbook list from manifest: #{manifest}"
     @cookbook_list = YAML.load_file(File.join(Rake.original_dir, manifest))
     unless scope == 'all'
       @cookbook_list = @cookbook_list.find_all{|ckbk| ckbk == scope}
     end
   else
-    $stdout.puts "Starting build cookbook list from manifest: #{manifest}"
+    $stdout.puts "Starting build individual cookbook list from manifest: #{manifest}"
     @cookbook_list = YAML.load_file(File.join(Rake.original_dir, manifest))
     unless scope == 'all'
       @cookbook_list = @cookbook_list.find_all{|ckbk| ckbk == scope}
     end
   end
+  puts "  Total cookbooks: #{@cookbook_list.size}"
+  @cookbook_list
 end
 
 def post(uri, payload)
@@ -168,7 +172,7 @@ def create_repo(name)
     :public      => 1,
     :name        => "#{config['org']}/#{@abreviation}-#{name}",
     :description => "A Chef cookbook for #{name} (Initial Upstream: #{@upstream}, Repository: #{@repository||name})",
-    :homepage    => "https://github.com/#{@upstream}/#{@repository||repo}"
+    :homepage    => "https://github.com/#{@upstream}/#{@repository||name}"
   }
   create_repo_uri = "https://github.com/api/v2/json/repos/create"
   create_repo_result = post create_repo_uri, repo_info
@@ -203,9 +207,14 @@ def parse_metadata(cookbook, rev)
   rescue
     git "reset -q #{rev} metadata.rb"
     `knife cookbook metadata from file metadata.rb`
-    metadata= JSON.parse(::File.read('metadata.json'))
-    puts "Cookbook #{cookbook} Git revision #{rev} is version #{metadata['version']}"
-    rm('metadata.json')
+    if ::File.exist?('metadata.json')
+      metadata= JSON.parse(::File.read('metadata.json'))
+      puts "Cookbook #{cookbook} Git revision #{rev} is version #{metadata['version']}"
+      rm('metadata.json')
+    else
+      puts "No metadata.json for Cookbook #{cookbook} Git revision #{rev}"
+      metadata = {}
+    end
     git "reset --hard -q"
   end
   metadata
@@ -241,23 +250,23 @@ def update_all
     Dir.chdir(Rake.original_dir) do |path|
       FileList["upstream/*.yml"].collect do |manifest|
         @singles = false
-        $stdout.puts "Starting parse manifest: #{manifest}"
+        $stdout.puts "Starting parse collected repository manifest: #{manifest}"
         parse_manifest(manifest)
         upstream_clone
-        cookbook_list(manifest).each do |cookbook|
-          $stdout.puts "  Starting update_all cookbooks collective update: #{cookbook}"
-          update_single(cookbook)
+        cookbook_list(manifest).each do |ckbk|
+          $stdout.puts "  Starting update_all cookbooks collective update: #{ckbk[0].inspect}"
+          update_single(ckbk[0])
         end
         cleanup_clone
       end
       FileList["upstream/singles/*.yml"].collect do |manifest|
         @singles = true
-        $stdout.puts "Starting parse manifest: #{manifest}"
+        $stdout.puts "Starting parse single repositories manifest: #{manifest}"
         parse_manifest(manifest, true)
         upstream_clone
         cookbook_list(manifest).each do |cookbook|
-          $stdout.puts "  Starting update_all cookbooks singular update: #{cookbook}"
-          update_single(cookbook)
+          $stdout.puts "  Starting update_all cookbooks singular update: #{cookbook[0]}"
+          update_single(cookbook[0])
         end
         cleanup_clone
       end
