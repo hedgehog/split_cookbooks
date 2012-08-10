@@ -6,7 +6,7 @@ require 'base64'
 require 'rake/clean'
 require 'pry'
 
-def cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
+def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
   $stdout.puts "Starting build cookbook tasks: #{manifest}"
   upstream_cookbook_list(manifest, scope)
   @cookbook_list.collect do |cookbook|
@@ -272,7 +272,7 @@ def update_all
         parse_manifest(manifest, true)
         upstream_clone
         cookbook_list(manifest).each do |cookbook|
-          $stdout.puts "  Starting update_all cookbooks singular update: #{cookbook[0]}"
+          $stdout.puts "  Starting update_all cookbooks singular update: #{cookbook[0].inspect}"
           update_single(cookbook[0])
         end
         cleanup_clone
