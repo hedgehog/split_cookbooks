@@ -4,7 +4,13 @@
 - apache2
 - apparmor
 - application
+- application_java
+- application_nginx
+- application_php
+- application_python
+- application_ruby
 - apt
+- ark
 - aws
 - bluepill
 - boost
@@ -25,6 +31,8 @@
 - emacs
 - erlang
 - fail2ban
+- firewall
+- freebsd
 - gecode
 - gems
 - git
@@ -34,6 +42,8 @@
 - hadoop
 - haproxy
 - heartbeat
+- homebrew
+- horizon
 - iis
 - imagemagick
 - iptables
@@ -42,6 +52,7 @@
 - jira
 - jpackage
 - keepalived
+- keystone
 - kickstart
 - logrotate
 - logwatch
@@ -56,6 +67,7 @@
 - mysql
 - nagios
 - nginx
+- nova
 - nscd
 - ntp
 - ohai
@@ -92,6 +104,8 @@
 - stompserver
 - subversion
 - sudo
+- supervisor
+- swift
 - tftp
 - thrift
 - tmux
@@ -106,6 +120,7 @@
 - varnish
 - vim
 - webpi
+- whitelist-node-attrs
 - windows
 - wix
 - wordpress
