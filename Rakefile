@@ -21,6 +21,8 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
       puts "#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}"
       puts File.directory?("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}").inspect
 
+      create_repo(cookbook) unless repo_exists?(cookbook)
+
       unless File.directory?("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}")
 
         file "tmp/#{@abreviation}-#{cookbook}" do
@@ -46,8 +48,6 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
             git 'reflog expire --expire=now --all'
             git 'repack -ad'
             git 'gc --aggressive --prune=now'
-
-            create_repo(cookbook) unless repo_exists?(cookbook)
 
             # check for existing tags
             git 'remote rm origin'
@@ -128,8 +128,7 @@ end
 
 def post(uri, payload)
   sleep 1 # github api throttlin'
-  basic_auth = Base64.encode64("#{config['login']}/token:#{config['token']}").gsub("\n", '')
-  headers = { 'Authorization' => "Basic #{basic_auth}", :content_type => :json, :accept => :json}
+  headers = { 'Authorization' => "token #{config['token']}", :content_type => :json, :accept => :json}
   puts "URI: #{uri}"
   puts "JSON payload: #{payload.to_json}"
   puts "Headers: #{headers}"
@@ -137,17 +136,22 @@ def post(uri, payload)
   json_response = RestClient.post(uri, payload.to_json, headers)
   rescue RestClient::UnprocessableEntity => e
     # we ignore cases where the team already exists.  We are expected to delete
-    #repos we wan to create but not teams.
+    #repos we want to create but not teams.
     raise(e) unless e.message[/422 Unprocessable Entity/]
+  rescue => err
+    $stdout.puts "Error: #{err}"
+    $stdout.puts "Error: #{err.inspect}"
+    $stdout.puts "Error: #{err.message}"
+    $stdout.puts "Error: #{json_response.inspect}"
+  ensure
+    puts "Respone: #{json_response.inspect}"
   end
-  puts "Respone: #{json_response}"
   json_response.nil? ? "{}".to_json : JSON.parse(json_response)
 end
 
 def get(uri)
   sleep 1 # github api throttlin'
-  basic_auth = Base64.encode64("#{config['login']}/token:#{config['token']}").gsub("\n", '')
-  headers = { 'Authorization' => "Basic #{basic_auth}"}
+  headers = { 'Authorization' => "token #{config['token']}"}
   JSON.parse(RestClient.get(uri, headers))
 end
 
@@ -175,33 +179,41 @@ end
 def create_repo(name)
   repo_info = {
     :public      => 1,
-    :name        => "#{config['org']}/#{@abreviation}-#{name}",
+    :name        => "#{@abreviation}-#{name}",
     :description => "A Chef cookbook for #{name} (Initial Upstream: #{@upstream}, Repository: #{@repository||name})",
     :homepage    => "https://github.com/#{@upstream}/#{@repository||name}"
   }
-  create_repo_uri = "https://github.com/api/v2/json/repos/create"
+  puts "Creating repo: #{repo_info[:name]}"
+  create_repo_uri = "https://api.github.com/orgs/#{config['org']}/repos"
   create_repo_result = post create_repo_uri, repo_info
-  puts create_repo_result.inspect
-  create_team_uri = "https://github.com/api/v2/json/organizations/#{config['org']}/teams/"
-  team_info = {:team => { :name => "#{@abreviation}-#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] } }
+  puts "  Repo creation succeeded: #{create_repo_result.inspect}"
+  create_team_uri = "https://api.github.com/orgs/#{config['org']}/teams/"
   sleep 1
+  team_info = { :name => "#{@abreviation}-#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] }
   create_team_result = post create_team_uri, team_info
-  team_info2 = {:team => { :name => "#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] } }
+  puts "  Team creation succeeded: #{create_team_result.inspect}"
   sleep 1
-  create_team_result = post create_team_uri, team_info2
+  team_info2 = { :name => "#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] }
+  create_team2_result = post create_team_uri, team_info2
+  puts "  Team 2 creation succeeded: #{create_team2_result.inspect}"
   # team_id = create_team_result['team']['id']
   # add_team_member_uri = "https://github.com/api/v2/json/teams/#{team_id}/members?name=#{config['login']}"
   # add_team_member_result = post add_team_member_uri
   # puts add_team_member_result.inspect
-  create_team_result
+  create_team2_result
 end
 
 def repo_exists?(name)
   repo = true
+  url = "https://api.github.com/repos/#{config['org']}/#{@abreviation}-#{name}"
   begin
-    repositories = get("https://github.com/api/v2/json/repos/show/#{config['org']}/#{@abreviation}-#{name}")
-  rescue RestClient::Exception => e
-    repo = false if e.http_body[/Repository not found/]
+    $stdout.puts "Checking URL: #{url}"
+    repositories = get(url)
+    $stdout.puts "  Check result: #{repositories.inspect}"
+  rescue RestClient::ResourceNotFound => e
+      repo = false
+      $stdout.puts "  Other error: #{e.inspect}"
+      $stdout.puts "  HTTP Code: #{e.http_code}"
   end
   repo
 end

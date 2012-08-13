@@ -1,7 +1,9 @@
 - chef-app
 - chef-backup
 - chef-bag_config
+- chef-bridger
 - chef-chef_gem
+- chef-control_groups
 - chef-cube
 - chef-dnsimple
 - chef-dnsimple-pdns-provider
