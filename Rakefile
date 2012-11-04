@@ -6,6 +6,11 @@ require 'base64'
 require 'rake/clean'
 require 'pry'
 
+# split_cookbooks helper methods
+require './helper.rb'
+
+load './deploy_archives.rake'
+
 def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
   $stdout.puts "Starting build cookbook tasks: #{manifest}"
   upstream_cookbook_list(manifest, scope)
@@ -22,7 +27,7 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
       puts File.directory?("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}").inspect
 
       create_repo(cookbook) unless repo_exists?(cookbook)
-
+      create_team(cookbook)
       unless File.directory?("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}")
 
         file "tmp/#{@abreviation}-#{cookbook}" do
@@ -32,9 +37,10 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
           else
             git "clone --no-hardlinks cookbooks tmp/#{@abreviation}-#{cookbook}"
           end
-          puts File.directory?("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}")
-          Dir.chdir("#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}") do
-            puts `pwd`
+          tmp_ckbk_dir = "#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}"
+          puts File.directory?(tmp_ckbk_dir)
+          Dir.chdir(tmp_ckbk_dir) do
+            $stdout.puts `pwd`
             $stdout.puts "  Extracting #{cookbook}"
             if @singles
             else
@@ -54,15 +60,15 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
             git "remote add cookbooks git@github.com:#{config['org']}/#{@abreviation}-#{cookbook}.git"
             git 'fetch cookbooks'
 
-            # tag versions
+            # tag versions and archive tags
             revisions = git_output "rev-list --topo-order --branches"
             version = nil
             revisions.split(/\n/).each do |rev|
               metadata = parse_metadata(cookbook, rev)
               if metadata['version'] && metadata['version'] != version
                 version = metadata['version']
-                puts "tagging #{rev} as #{version}"
-                git "tag -a #{version}  -m 'Chef cookbook #{@abreviation}-#{cookbook} version: #{version}' #{rev}"
+                puts "tagging #{rev} as qa-#{version}"
+                git "tag -a qa-#{version}  -m 'Chef cookbook #{@abreviation}-#{cookbook} version: #{version}' #{rev}"
               end
             end
             git 'config --add remote.cookbooks.push "+refs/heads/*:refs/heads/*"'
@@ -76,6 +82,9 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
               puts 'Creating the qa branch.'
               git 'checkout -b qa'
               git 'push -u cookbooks qa'
+            end
+            Dir.chdir(Rake.original_dir) do
+              `./archive_tags.sh #{tmp_ckbk_dir} #{@abreviation}-#{cookbook} /src/archives`
             end
           end
         end
@@ -101,10 +110,6 @@ end
 
 def git_output(command)
   `git #{command}`.chomp
-end
-
-def config
-  @config ||= YAML.load_file(File.join(Rake.original_dir, 'config.yml'))
 end
 
 def upstream_cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
@@ -176,6 +181,23 @@ def cleanup_clone
   @deep_clone = nil
 end
 
+def create_team(name)
+  create_team_uri = "https://api.github.com/orgs/#{config['org']}/teams"
+  sleep 1
+  team_info = {:name => "#{@abreviation}-#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"]}
+  create_team_result = post create_team_uri, team_info
+  puts "  Team creation succeeded: #{create_team_result.inspect}"
+  sleep 1
+  team_info2 = {:name => "#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"]}
+  create_team2_result = post create_team_uri, team_info2
+  puts "  Team 2 creation succeeded: #{create_team2_result.inspect}"
+  # team_id = create_team_result['team']['id']
+  # add_team_member_uri = "https://github.com/api/v2/json/teams/#{team_id}/members?name=#{config['login']}"
+  # add_team_member_result = post add_team_member_uri
+  # puts add_team_member_result.inspect
+  create_team2_result
+end
+
 def create_repo(name)
   repo_info = {
     :public      => 1,
@@ -187,20 +209,7 @@ def create_repo(name)
   create_repo_uri = "https://api.github.com/orgs/#{config['org']}/repos"
   create_repo_result = post create_repo_uri, repo_info
   puts "  Repo creation succeeded: #{create_repo_result.inspect}"
-  create_team_uri = "https://api.github.com/orgs/#{config['org']}/teams/"
-  sleep 1
-  team_info = { :name => "#{@abreviation}-#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] }
-  create_team_result = post create_team_uri, team_info
-  puts "  Team creation succeeded: #{create_team_result.inspect}"
-  sleep 1
-  team_info2 = { :name => "#{name}", :permission => 'push', :repo_names => ["#{config['org']}/#{@abreviation}-#{name}"] }
-  create_team2_result = post create_team_uri, team_info2
-  puts "  Team 2 creation succeeded: #{create_team2_result.inspect}"
-  # team_id = create_team_result['team']['id']
-  # add_team_member_uri = "https://github.com/api/v2/json/teams/#{team_id}/members?name=#{config['login']}"
-  # add_team_member_result = post add_team_member_uri
-  # puts add_team_member_result.inspect
-  create_team2_result
+  create_repo_result
 end
 
 def repo_exists?(name)
