@@ -18,6 +18,7 @@ To update all cookbooks:
   popd
 
 
-TODO:
+Done:
 - Create archives from Git tags & upload to Cloudfront
   http://systemoverlord.com/blog/2011/07/16/automatically-creating-archives-git-tags
+- Write a www.cookbooks.io compatible source for Librarian-chef

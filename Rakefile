@@ -7,6 +7,7 @@ require 'rake/clean'
 require 'pry'
 
 # split_cookbooks helper methods
+require './metadata.rb'
 require './helper.rb'
 
 load './deploy_archives.rake'
@@ -233,7 +234,7 @@ def parse_metadata(cookbook, rev)
   rescue
     git "reset -q #{rev} metadata.rb"
     if ::File.exist?('metadata.rb')
-      `knife cookbook metadata from file metadata.rb`
+      puts `knife cookbook metadata from file metadata.rb`
     end
     if ::File.exist?('metadata.json')
       metadata= JSON.parse(::File.read('metadata.json'))

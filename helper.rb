@@ -1,3 +1,4 @@
+require 'json'
 require 'fog'
 
 def config
@@ -65,8 +66,9 @@ class Site
     def initialize( site )
       @site = site
       @index = {}
+      @cookbook_index = {}
       @updated_paths = []
-      @signed_url = ""
+      @signed_url = ''
     end
 
     # Validate our `Site`, create a and configure a bucket, build the index,
@@ -117,15 +119,76 @@ class Site
     end
 
     # Build an index of all the local files and their md5 sums. This will be
-    # used to decide what needs to be deployed.
+    # used to decide what needs to be deployed. Also build JSON files (per Chef-API)
+    # which function as version indexes for Librarian-chef.
     def build_index
       puts "Building index:"
-      Dir['**/*'].each do |path|
-        unless File.directory?( path )
+      @cookbook_index = {}
+      prev_path = false
+      Dir['**/*'].sort.each do |path|
+        if File.directory?( path )
+          build_cookbook_index(prev_path) if prev_path
+          start_cookbook_index(path)
           puts "  #{path}"
+          prev_path = path
+        else
+          puts "    #{path}"
+          cookbook, file = path.split(/\//)
           @index[path] = ::Digest::MD5.file(path).to_s
+          # Don't index .json or .zip files
+          unless path[/\.(json|zip)$/]
+            append_cookbook_index(path)
+            build_cookbook_metadata(cookbook, path)
+          end
         end
       end
+    end
+
+    def start_cookbook_index(path)
+      pp "Start indexing cookbook: #{path}"
+      cookbook, file = path.split(/\//)
+      @cookbook_index[cookbook] = { :name => cookbook, :versions => [] }
+    end
+
+    def append_cookbook_index(path)
+      cookbook, file = path.split(/\//)
+      @cookbook_index[cookbook][:versions] << "www.cookbooks.io/#{path}"
+    end
+
+    def extract_version(file, ext = '.zip')
+      File.basename(file, ext)
+    end
+
+    def build_cookbook_index(path)
+      cookbook, file = path.split(/\//)
+      cookbook_json = "#{cookbook}.json"
+      hsh = @cookbook_index[cookbook]
+      puts "  Build index JSON: #{cookbook}"
+      puts "    name: #{hsh[:name]}"
+      puts "    # versions: #{hsh[:versions].size}"
+      Pathname.new(cookbook_json).open('wb') { |f| f.write(JSON.dump(hsh)) }
+      @index[cookbook_json] = ::Digest::MD5.file(cookbook_json).to_s
+    end
+
+    def build_cookbook_metadata(name, path)
+      filename  = File.basename(path,".*")
+      metadata_json = File.join( File.dirname(path), "#{filename}.json" )
+      # Read metadata.rb extracted from the archive pointed to by path.
+      hsh = compile_manifest(name, path)
+      Pathname.new(metadata_json).open('wb') { |f| f.write(JSON.dump(hsh)) }
+    end
+
+    def compile_manifest(name, archive)
+      # Inefficient, if there are many cookbooks with uncompiled metadata.
+      require 'chef/json_compat'
+      require 'chef/cookbook/metadata'
+      md = ::Chef::Cookbook::Metadata.new
+      md.name(name)
+      md.from_archive(archive.to_s, 'metadata.rb')
+      pp '='*80
+      pp md
+      pp man = {'name' => md.name, 'version' => md.version, 'dependencies' => md.dependencies}
+      man
     end
 
     # Synchronize our local copy of the site with the remote one. This uses the
@@ -141,7 +204,7 @@ class Site
                  when 'production'
                    'public-read'
                  else
-                   'authenticated-read'
+                   'public-read'
                end
         remote_file.acl = perm
         path = remote_file.key
