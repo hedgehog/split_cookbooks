@@ -30,8 +30,10 @@
 - silverware
 - snappy
 - statsd
+- strongswan
 - tuning
 - volumes
 - volumes_ebs
 - zabbix
+- zeromq
 - zookeeper

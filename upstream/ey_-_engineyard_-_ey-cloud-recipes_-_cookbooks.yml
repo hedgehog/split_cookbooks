@@ -1,3 +1,5 @@
+- api-keys-yml
+- collectd
 - cron_check
 - delayed_job
 - elasticsearch
@@ -13,11 +15,16 @@
 - mongodb
 - mysql_replication_check
 - newrelic_server_monitoring
+- papertrail
+- php
 - postgresql9_extensions
+- rds
+- redis-yml
 - redis
 - resque-scheduler
 - resque
 - riak
+- shared_db
 - solr
 - sphinx
 - ssh_tunnel
