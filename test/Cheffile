@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+#^syntax detection
+
+ckbks 'http://www.cookbooks.io'
+
+cookbook 'oc-chef-client'
+
+cookbook 'oc-apache2', '>= 1.0.0'
+cookbook 'oc-application_ruby', '> 1.0.0'
