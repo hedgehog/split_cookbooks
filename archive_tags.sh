@@ -55,10 +55,10 @@ pushd ${REPO_DIR}
       REPO_BASE=${REPO##*/}
 
       # Make zip archive
-      if [[ ! -e "${ARCHIVE_DIR}/${tag}.zip" ]] ; then
-        [[ $DEBUG ]] && echo git archive --format=zip --prefix=${REPO_BASE}/ -o "${ARCHIVE_DIR}/${tag}.zip" $ref
-        git archive --format=zip --prefix=${REPO_BASE}/ -o "${ARCHIVE_DIR}/${tag}.zip" $ref
-      fi
+      #      if [[ ! -e "${ARCHIVE_DIR}/${tag}.zip" ]] ; then
+      #        [[ $DEBUG ]] && echo git archive --format=zip --prefix=${REPO_BASE}/ -o "${ARCHIVE_DIR}/${tag}.zip" $ref
+      #        git archive --format=zip --prefix=${REPO_BASE}/ -o "${ARCHIVE_DIR}/${tag}.zip" $ref
+      #      fi
       # Make tar.gz archive
       if [[ ! -e "${ARCHIVE_DIR}/${tag}.tar.gz" ]] ; then
         [[ $DEBUG ]] && echo git archive --format=tar.gz --prefix=${REPO_BASE}/ -o "${ARCHIVE_DIR}/${tag}.tar.gz" $ref

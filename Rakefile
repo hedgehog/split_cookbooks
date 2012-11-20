@@ -70,6 +70,7 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
                 version = metadata['version']
                 puts "tagging #{rev} as qa-#{version}"
                 git "tag -a qa-#{version}  -m 'Chef cookbook #{@abreviation}-#{cookbook} version: #{version}' #{rev}"
+              else
               end
             end
             git 'config --add remote.cookbooks.push "+refs/heads/*:refs/heads/*"'
@@ -230,22 +231,23 @@ end
 
 def parse_metadata(cookbook, rev)
   begin
-    metadata = JSON.parse(git_output("show #{rev}:metadata.json"))
-  rescue
     git "reset -q #{rev} metadata.rb"
     if ::File.exist?('metadata.rb')
       puts `knife cookbook metadata from file metadata.rb`
     end
     if ::File.exist?('metadata.json')
-      metadata= JSON.parse(::File.read('metadata.json'))
+      metadata= ::JSON.parse(::File.read('metadata.json'))
       puts "Cookbook #{cookbook} Git revision #{rev} is version #{metadata['version']}"
-      rm('metadata.json')
+      FileUtils.rm('metadata.json')
     else
-      puts "No metadata.json for Cookbook #{cookbook} Git revision #{rev}"
+      puts "No metadata.rb|json for Cookbook #{cookbook} Git revision #{rev}"
       metadata = {}
     end
     git "reset --hard -q"
+  rescue
+    puts "Failed to parse metadata.rb rev: #{rev}"
   end
+  puts "  metadata['version']=#{metadata['version']} for rev: #{rev}"
   metadata
 end
 

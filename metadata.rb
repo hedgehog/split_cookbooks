@@ -16,7 +16,7 @@ class Chef
         init_problem_hsh
         if File.exists?(archive) && File.readable?(archive)
           contents = extract_file_to_string(archive, filename)
-          pp contents
+          #pp contents
           pp destination = File.basename(File.dirname(archive))
           tgz = ::Zlib::GzipReader.new(File.open(archive, 'rb'))
           Dir.mktmpdir {|dir|
@@ -24,44 +24,37 @@ class Chef
             Dir.chdir(dir) {
               ::Archive::Tar::Minitar.unpack(tgz, 'xyz')
               Dir.chdir("xyz/#{destination}") do |dr|
-                if @metadata_json_problems.key?(destination)
-                  @metadata_json_problems[destination].each do |fn|
-                    if archive[/#{fn}/]
-                      metadata_processed = parse_metadata('rb')
-                      break
-                    end
-                  end
-                  unless metadata_processed
-                    metadata_processed = parse_metadata('json')
-                  end
-                elsif @metadata_rb_problems.key?(destination)
+                if @metadata_rb_problems.key?(destination)
                   @metadata_rb_problems[destination].each do |fn|
                     if archive[/#{fn}/]
+                      break if (@metadata_json_problems.key?(destination) && @metadata_rb_problems[destination].index(fn))
                       metadata_processed = parse_metadata('json')
                       break
                     end
                   end
-                  fn = "#{Dir.pwd}/metadata.#{ext}"
-                  if !metadata_processed && File.exists?(fn) && File.readable?(fn)
-                    metadata_processed = parse_metadata('rb')
+                  if !metadata_processed
+                    # We cannot generate a json manifest from metadata.rb|json so
+                    # try knife
+                    pp '='*80
+                    pp '='
+                    pp '= Warning the metadata contents here could be problematic.'
+                    pp "= #{destination} #{archive}"
+                    pp '='
+                    pp '='*80
+                    `knife cookbook metadata from file #{Dir.pwd}/metadata.rb`
+                    metadata_processed = parse_metadata('json')
+                    # otherwise someone will get bitten...
+                    if !metadata_processed
+                      raise "Could not parse metadata files required to create manifest: #{archive}"
+                    end
                   end
                 else
                   # we don't seems to have problematic metadata files
                   metadata_processed = parse_metadata('rb')
                 end
-                unless metadata_processed
-                  # We cannot generate a json manifest so try knife
-                  pp '='*80
-                  pp '='
-                  pp '= Warning the metadata contents here could be problematic.'
-                  pp "= #{destination} #{archive}"
-                  pp '='
-                  pp '='*80
-                  `knife cookbook metadata from file #{Dir.pwd}/metadata.rb`
-                  metadata_processed = parse_metadata('json')
-                  # otherwise someone will get bitten...
+                if !metadata_processed
+                  metadata_processed = parse_metadata('rb')
                 end
-
               end
             }
           }
@@ -92,7 +85,8 @@ class Chef
 
       def init_problem_hsh
         @metadata_json_problems ||= {'ap-cookbook-dbench' => ['0.0.1.tar.gz',
-                                                              '0.0.4.tar.gz']}
+                                                              '0.0.4.tar.gz']
+                                     }
         @metadata_rb_problems   ||= {}
       end
 

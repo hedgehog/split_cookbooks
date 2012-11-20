@@ -119,24 +119,49 @@ class Site
     end
 
     # Build an index of all the local files and their md5 sums. This will be
-    # used to decide what needs to be deployed. Also build JSON files (per Chef-API)
-    # which function as version indexes for Librarian-chef.
+    # used to decide what needs to be deployed.
+    # Also build JSON files (per Chef-API) which function as version indexes
+    # for Librarian-chef. IF no metadat files can be parsed to generate the
+    # manifest required by Librarian-chef then the cookbook+archive are added
+    # to the exclusion list @skip_cookbook.
     def build_index
       puts "Building index:"
       @cookbook_index = {}
+      init_skip_cookbooks
       prev_path = false
-      Dir['**/*'].sort.each do |path|
+      Dir['**/*'].each do |path|
         if File.directory?( path )
           build_cookbook_index(prev_path) if prev_path
           start_cookbook_index(path)
           puts "  #{path}"
           prev_path = path
         else
-          puts "    #{path}"
           cookbook, file = path.split(/\//)
-          @index[path] = ::Digest::MD5.file(path).to_s
-          # Don't index .json or .zip files
-          unless path[/\.(json|zip)$/]
+          if @skip_cookbooks.index(path)
+            puts "Skipping #{path}"
+            next
+          end
+          # Rakefile task only tags as qa- those with version metadata.
+          # Index for S3 upload files that:
+          # - do start `qa-` and do end `.tar.gz`
+          # - do not start `qa-` and do end `.json`
+          if path[/(qa-.*)(\.tar\.gz$)/] || path[/\.json$/]
+            puts "    #{path}"
+            @index[path] = ::Digest::MD5.file(path).to_s
+          elsif (!path[/qa-/] && path[/\.tar\.gz$/]) || path[/\.zip$/]
+            # Delete/cleanup files that:
+            # - do not start `qa-` and do end `.taq.gz`
+            # - do end `.zip`
+            if File.exist?(path)
+              FileUtils.rm(path)
+            end
+          end
+          # Only `qa-` tags have metadata version information.
+          # Don't Librarian-chef index files that:
+          # - do end `.json`
+          # - do end `.zip`
+          # - do not start `qa-` and do end `.taq.gz`
+          if !path[/\.zip$/] && !path[/\.json$/] && !(!path[/qa-/] && path[/\.tar\.gz$/])
             append_cookbook_index(path)
             build_cookbook_metadata(cookbook, path)
           end
@@ -145,14 +170,16 @@ class Site
     end
 
     def start_cookbook_index(path)
-      pp "Start indexing cookbook: #{path}"
       cookbook, file = path.split(/\//)
+      puts "Start indexing cookbook: #{cookbook} file: #{file}"
       @cookbook_index[cookbook] = { :name => cookbook, :versions => [] }
     end
 
     def append_cookbook_index(path)
       cookbook, file = path.split(/\//)
-      @cookbook_index[cookbook][:versions] << "www.cookbooks.io/#{path}"
+      tag = "#{File.basename(file,'.tar.gz')}.json"
+      puts "     cookbook: #{cookbook} file: #{tag}"
+      @cookbook_index[cookbook][:versions] << "http://www.cookbooks.io/#{cookbook}/#{tag}"
     end
 
     def extract_version(file, ext = '.zip')
@@ -166,16 +193,19 @@ class Site
       puts "  Build index JSON: #{cookbook}"
       puts "    name: #{hsh[:name]}"
       puts "    # versions: #{hsh[:versions].size}"
-      Pathname.new(cookbook_json).open('wb') { |f| f.write(JSON.dump(hsh)) }
+      hsh[:versions].each do |ver|
+        puts "                 #{ver}"
+      end
+      Pathname.new(cookbook_json).open('w') { |f| f.write(JSON.dump(hsh)) }
       @index[cookbook_json] = ::Digest::MD5.file(cookbook_json).to_s
     end
 
     def build_cookbook_metadata(name, path)
-      filename  = File.basename(path,".*")
+      filename  = File.basename(path,".tar.gz")
       metadata_json = File.join( File.dirname(path), "#{filename}.json" )
       # Read metadata.rb extracted from the archive pointed to by path.
       hsh = compile_manifest(name, path)
-      Pathname.new(metadata_json).open('wb') { |f| f.write(JSON.dump(hsh)) }
+      ::Pathname.new(metadata_json).open('wb') { |f| f.write(JSON.dump(hsh)) }
     end
 
     def compile_manifest(name, archive)
@@ -183,12 +213,28 @@ class Site
       require 'chef/json_compat'
       require 'chef/cookbook/metadata'
       md = ::Chef::Cookbook::Metadata.new
+      # TODO: consider using 'replaces' from metadata here instead of name or inserting
       md.name(name)
       md.from_archive(archive.to_s, 'metadata.rb')
-      pp '='*80
-      pp md
-      pp man = {'name' => md.name, 'version' => md.version, 'dependencies' => md.dependencies}
+      pp man = {'name' => md.name,
+                'replaces' => depends_name(md),
+                'version' => md.version,
+                'file' => "http://www.cookbooks.io/#{archive.to_s}",
+                'dependencies' => md.dependencies}
       man
+    end
+
+    # Return this cookbook's name as shown in any other cookbooks `depends` listing
+    # Hierachy:
+    # replaces (from metadata)
+    # lookup from upstream definition file
+    def depends_name(metadata)
+      if metadata.replaces
+        return metadata.replaces
+      else
+        # TODO: lookup depends_name from upstream yml file
+        return metadata.name
+      end
     end
 
     # Synchronize our local copy of the site with the remote one. This uses the
@@ -239,9 +285,9 @@ class Site
     # Push a single file out to S3.
     def write_file( path )
       cmp = nil
-      pp path
+      # pp path
       ext = File.extname(path).gsub(/\./,'')
-      pp ext
+      # pp ext
       cmp = 'gzip' if @site.compress.include?(ext)
       @directory.files.create :key => path,
                               :body => File.open( path ),
@@ -251,10 +297,25 @@ class Site
 
     # Compose and post a cache invalidation request to CloudFront. This will
     # ensure that all CloudFront distributions get the latest content quickly.
+    # Note:
+    #  - 1000 items can be invalidated in one request.
+    #  - Up to 3 concurrent requests can be issued.
+    # Reference:
+    # - http://aws.amazon.com/cloudfront/faqs/#Is_there_a_limit_to_the_number_of_invalidation_requests
+
     def invalidate_cache( distribution_id )
       unless @updated_paths.empty?
-        puts "Invalidating cached copy of: #{@updated_paths}"
-        cdn.post_invalidation distribution_id, @updated_paths
+        @updated_paths.each_slice(1000).to_a.each do |ary|
+
+          #
+          # Suspending since AWS charges $5/1000 invalidation requests per month!
+          #
+
+          #puts "Invalidating cached copy of: #{ary}"
+          #resp = cdn.post_invalidation distribution_id, ary
+          #puts "Done. Response:"
+          #puts resp.body
+        end
       end
     end
 
@@ -287,7 +348,36 @@ class Site
     def assert_not_nil( value, error )
       raise UsageError.new( error ) unless value
     end
+
+    def init_skip_cookbooks
+      # see for example
+      # yumrepo:  https://tickets.opscode.com/browse/CHEF-2326
+      @skip_cookbooks ||= [
+        'ap-cookbook-yumrepo/qa-0.0.1.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.0.2.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.0.3.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.0.4.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.0.6.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.0.8.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.10.0.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.10.1.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.11.0.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.11.1.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.11.2.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.12.0.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.12.4.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.16.2.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.16.3.tar.gz',
+        'ap-cookbook-yumrepo/qa-0.16.4.tar.gz',
+        'mc-hostname/qa-0.0.2.tar.gz',
+        'mc-hostname/qa-0.2.2.tar.gz',
+        'oc-chef/qa-0.15.0.tar.gz',
+        'oc-chef/qa-0.19.0.tar.gz',
+        'rs-repo_git/qa-0.1.0.tar.gz',
+        'rs-rs_utils/qa-0.1.0.tar.gz',
+        'rs-web_apache/qa-0.1.0.tar.gz'
+      ]
+    end
   end
 end
-
 
