@@ -16,6 +16,7 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
   $stdout.puts "Starting build cookbook tasks: #{manifest}"
   upstream_cookbook_list(manifest, scope)
   @cookbook_list.collect do |cookbook|
+
     if @folder
       cookbook_path = File.join(Rake.original_dir, 'cookbooks', @folder, cookbook)
     else
@@ -34,9 +35,9 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
         file "tmp/#{@abreviation}-#{cookbook}" do
           $stdout.puts "  Cloning #{cookbook}"
           if @singles
-            git "clone --no-hardlinks cookbooks/#{cookbook} tmp/#{@abreviation}-#{cookbook}"
+            git "clone --quiet --no-hardlinks cookbooks/#{cookbook} tmp/#{@abreviation}-#{cookbook}"
           else
-            git "clone --no-hardlinks cookbooks tmp/#{@abreviation}-#{cookbook}"
+            git "clone --quiet --no-hardlinks cookbooks tmp/#{@abreviation}-#{cookbook}"
           end
           tmp_ckbk_dir = "#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}"
           puts File.directory?(tmp_ckbk_dir)
@@ -68,9 +69,10 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
               metadata = parse_metadata(cookbook, rev)
               if metadata['version'] && metadata['version'] != version
                 version = metadata['version']
-                puts "tagging #{rev} as qa-#{version}"
+                puts "Now tagging #{rev} as qa-#{version}"
                 git "tag -a qa-#{version}  -m 'Chef cookbook #{@abreviation}-#{cookbook} version: #{version}' #{rev}"
               else
+                # puts "version: #{version} metadata['version']: #{metadata['version']}"
               end
             end
             git 'config --add remote.cookbooks.push "+refs/heads/*:refs/heads/*"'
@@ -78,7 +80,7 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
             git 'push cookbooks'
             result = `git ls-remote --heads cookbooks|grep refs/heads/qa`
             if $? == 0
-              # TODO: Add rebase dry-run test and then dry run is it will be clean.
+              # TODO: Add re-base dry-run test and then dry run is it will be clean.
               #
             else
               puts 'Creating the qa branch.'
@@ -86,7 +88,7 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
               git 'push -u cookbooks qa'
             end
             Dir.chdir(Rake.original_dir) do
-              `./archive_tags.sh #{tmp_ckbk_dir} #{@abreviation}-#{cookbook} /src/archives`
+              puts `./archive_tags.sh #{tmp_ckbk_dir} #{@abreviation}-#{cookbook} /src/archives test`
             end
           end
         end
@@ -103,10 +105,13 @@ end
 
 def git(command)
   begin
-    system %{git #{command}}
+    resp = system %{git #{command}}
   rescue => e
     puts e.inspect
     puts caller.join('/n')
+  ensure
+    #puts resp
+    resp
   end
 end
 
@@ -114,7 +119,7 @@ def git_output(command)
   `git #{command}`.chomp
 end
 
-def upstream_cookbook_list(manifest='upstream/opscode_-_cookbooks.yml', scope='all')
+def upstream_cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
   # Test if cookbook silo or single cookbook repositories.
   if @repository && !@singles
     $stdout.puts "Starting build collected cookbook list from manifest: #{manifest}"
@@ -231,13 +236,14 @@ end
 
 def parse_metadata(cookbook, rev)
   begin
-    git "reset -q #{rev} metadata.rb"
+    git "checkout #{rev}"
     if ::File.exist?('metadata.rb')
-      puts `knife cookbook metadata from file metadata.rb`
+      #puts ::File.read('metadata.rb')
+      `knife cookbook metadata from file metadata.rb`
     end
     if ::File.exist?('metadata.json')
       metadata= ::JSON.parse(::File.read('metadata.json'))
-      puts "Cookbook #{cookbook} Git revision #{rev} is version #{metadata['version']}"
+      # puts "Cookbook #{cookbook} Git revision #{rev} is version #{metadata['version']}"
       FileUtils.rm('metadata.json')
     else
       puts "No metadata.rb|json for Cookbook #{cookbook} Git revision #{rev}"
@@ -247,7 +253,7 @@ def parse_metadata(cookbook, rev)
   rescue
     puts "Failed to parse metadata.rb rev: #{rev}"
   end
-  puts "  metadata['version']=#{metadata['version']} for rev: #{rev}"
+  #puts "  metadata['version']=#{metadata['version']} for rev: #{rev}"
   metadata
 end
 
