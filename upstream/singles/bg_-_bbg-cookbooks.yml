@@ -1,0 +1,12 @@
+chef-logstash:     logstash
+boost:             boost
+jpackage:          jpackage
+imagemagick:       imagemagick
+tomcat:            tomcat
+couchdb:           couchdb
+gecode:            gecode
+nodejs-cookbook:   nodejs
+bluebox:           bluebox
+ant:               ant
+chef-group:        chef-group
+chef-services:     chef-services
