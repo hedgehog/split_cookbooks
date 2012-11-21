@@ -41,7 +41,7 @@ pushd ${REPO_DIR}
           [[ $DEBUG ]] && echo "Not a tag reference..."
           continue
       fi
-      if [[ ! "$ref" =~ qa- ]] ; then
+      if [[ ! "$ref" =~ ^refs/tags/qa- ]] ; then
           [[ $DEBUG ]] && echo "Not a qa- tag..."
           continue
       fi

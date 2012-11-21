@@ -10,6 +10,16 @@ end
 # Site represents a site to be deployed to S3 and CloudFront. This object
 # is a simple data structure, which is deployed with a `FogSite::Deployer`
 #
+module MetaDataSingletonMethods
+
+  def depends_name(name)
+    @depends_name = name
+  end
+
+  def depends_name
+    @depends_name
+  end
+end
 
 class Site
   attr_reader :domain_name
@@ -143,14 +153,15 @@ class Site
           end
           # Rakefile task only tags as qa- those with version metadata.
           # Index for S3 upload files that:
-          # - do start `qa-` and do end `.tar.gz`
+          # - do start `qa-` and do end `.tar.xz`
           # - do not start `qa-` and do end `.json`
-          if path[/(qa-.*)(\.tar\.gz$)/] || path[/\.json$/]
+          if path[/\.json$/] || path[/(qa-.*)(\.tar\.xz$)/]
             puts "    #{path}"
             @index[path] = ::Digest::MD5.file(path).to_s
           elsif (!path[/qa-/] && path[/\.tar\.gz$/]) || path[/\.zip$/]
             # Delete/cleanup files that:
             # - do not start `qa-` and do end `.taq.gz`
+            # - do start `qa-` and do end `.tar.gz`
             # - do end `.zip`
             if File.exist?(path)
               FileUtils.rm(path)
@@ -162,7 +173,7 @@ class Site
           # - do end `.zip`
           # - do not start `qa-` and do end `.taq.gz`
           if !path[/\.zip$/] && !path[/\.json$/] && !(!path[/qa-/] && path[/\.tar\.gz$/])
-            append_cookbook_index(path)
+            append_cookbook_versions(path)
             build_cookbook_metadata(cookbook, path)
           end
         end
@@ -175,15 +186,31 @@ class Site
       @cookbook_index[cookbook] = { :name => cookbook, :versions => [] }
     end
 
-    def append_cookbook_index(path)
+    def append_cookbook_versions(path)
       cookbook, file = path.split(/\//)
-      tag = "#{File.basename(file,'.tar.gz')}.json"
+      case File.extname(file)
+        when '.gz'
+          tag = "#{File.basename(file,'.tar.gz')}.json"
+        when '.xz'
+          tag = "#{File.basename(file,'.tar.xz')}.json"
+      end
       puts "     cookbook: #{cookbook} file: #{tag}"
       @cookbook_index[cookbook][:versions] << "http://www.cookbooks.io/#{cookbook}/#{tag}"
     end
 
-    def extract_version(file, ext = '.zip')
-      File.basename(file, ext)
+    def extract_version(file, ext = '.xz')
+      prefix, version = ::File.basename(file, ext).to_s[/(qa-).*/]
+      version
+    end
+
+    def extract_depends_name(archive)
+      ::XZ::StreamReader.open(archive) do |txz|
+        ::Archive::Tar::Minitar::Reader.new(txz).each do |e|
+          next if e.file?
+          next if e.dirname[/pax_global_header/]
+          return e.full_name.to_s
+        end
+      end
     end
 
     def build_cookbook_index(path)
@@ -193,18 +220,71 @@ class Site
       puts "  Build index JSON: #{cookbook}"
       puts "    name: #{hsh[:name]}"
       puts "    # versions: #{hsh[:versions].size}"
+      if hsh[:versions]
+        puts "Sorted 'versions' data:"
+        list = []
+        hsh[:versions].each do |v|
+          list.push(::Version.new(v))
+        end
+        hsh[:versions] = list.sort
+      else
+        puts "No 'versions' data: #{hsh}"
+      end
       hsh[:versions].each do |ver|
         puts "                 #{ver}"
       end
+      hsh['depends_name'] = @depends_name
       Pathname.new(cookbook_json).open('w') { |f| f.write(JSON.dump(hsh)) }
       @index[cookbook_json] = ::Digest::MD5.file(cookbook_json).to_s
     end
 
+    class ::Version
+      # Source: http://www.dzone.com/snippets/ruby-class-easy-version-number
+      include ::Comparable
+
+      attr_reader :major, :feature_group, :feature, :bugfix
+
+      def initialize(str="")
+        @lead, @prefix, version, @suffix = str.split(/^(.*qa-)(.*)(\.json)/)
+        v = version.split(".")
+        @major = v[0].to_i
+        @feature_group = v[1].to_i if v.size >= 2
+        @feature = v[2].to_i if v.size >= 3
+        @bugfix = v[3].to_i if v.size >= 4
+      end
+
+      def <=>(other)
+        return @major <=> other.major if ((@major <=> other.major) != 0)
+        return @feature_group <=> other.feature_group if ((@feature_group <=> other.feature_group) != 0)
+        return @feature <=> other.feature if ((@feature <=> other.feature) != 0)
+        return @bugfix <=> other.bugfix
+      end
+
+      def self.sort
+        self.sort!{|a,b| a <=> b}
+      end
+
+      def to_s
+        str = @lead + @prefix + @major.to_s
+        str << ".#{@feature_group.to_s}" if @feature_group
+        str << ".#{@feature.to_s}" if @feature
+        str << ".#{@bugfix.to_s}" if @bugfix
+        str << @suffix
+      end
+    end
+
     def build_cookbook_metadata(name, path)
-      filename  = File.basename(path,".tar.gz")
+      case File.extname(path)
+        when '.gz'
+          filename  = File.basename(path, '.tar.gz')
+        when '.xz'
+          filename  = File.basename(path, '.tar.xz')
+      end
       metadata_json = File.join( File.dirname(path), "#{filename}.json" )
       # Read metadata.rb extracted from the archive pointed to by path.
       hsh = compile_manifest(name, path)
+      # Set depends name to be written to cookbook index file
+      @depends_name = hsh['depends_name']
       ::Pathname.new(metadata_json).open('wb') { |f| f.write(JSON.dump(hsh)) }
     end
 
@@ -214,10 +294,16 @@ class Site
       require 'chef/cookbook/metadata'
       md = ::Chef::Cookbook::Metadata.new
       # TODO: consider using 'replaces' from metadata here instead of name or inserting
+      # The `depends_name` is a custom attr to pass this data back to the scope of
+      # the calling method
+      #md.extend(MetaDataSingletonMethods)
+      class << md
+        attr_accessor :depends_name
+      end
       md.name(name)
       md.from_archive(archive.to_s, 'metadata.rb')
       pp man = {'name' => md.name,
-                'replaces' => depends_name(md),
+                'depends_name' => md.depends_name,
                 'version' => md.version,
                 'file' => "http://www.cookbooks.io/#{archive.to_s}",
                 'dependencies' => md.dependencies}
@@ -229,12 +315,12 @@ class Site
     # replaces (from metadata)
     # lookup from upstream definition file
     def depends_name(metadata)
-      if metadata.replaces
-        return metadata.replaces
-      else
-        # TODO: lookup depends_name from upstream yml file
-        return metadata.name
-      end
+      #if metadata.replacing
+      #  return metadata.replacing
+      #else
+      #  # TODO: lookup depends_name from upstream yml file
+      #  return metadata.name
+      #end
     end
 
     # Synchronize our local copy of the site with the remote one. This uses the

@@ -15,8 +15,9 @@ load './deploy_archives.rake'
 def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
   $stdout.puts "Starting build cookbook tasks: #{manifest}"
   upstream_cookbook_list(manifest, scope)
-  @cookbook_list.collect do |cookbook|
-
+  @cookbook_list.collect do |k, v|
+    puts cookbook = k
+    puts replaces = v
     if @folder
       cookbook_path = File.join(Rake.original_dir, 'cookbooks', @folder, cookbook)
     else
@@ -63,7 +64,7 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
             git 'fetch cookbooks'
 
             # tag versions and archive tags
-            revisions = git_output "rev-list --topo-order --branches"
+            revisions = git_output "--no-pager log --oneline --format='%H' master -- metadata.rb"
             version = nil
             revisions.split(/\n/).each do |rev|
               metadata = parse_metadata(cookbook, rev)
@@ -88,7 +89,7 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
               git 'push -u cookbooks qa'
             end
             Dir.chdir(Rake.original_dir) do
-              puts `./archive_tags.sh #{tmp_ckbk_dir} #{@abreviation}-#{cookbook} /src/archives test`
+              puts `./archive_tags.sh #{tmp_ckbk_dir} #{@abreviation}-#{cookbook} /src/archives #{replaces}`
             end
           end
         end
@@ -262,7 +263,7 @@ def parse_manifest(manifest, single_repo=false)
   if single_repo
     @abreviation, @upstream = manifest.sub(/^upstream\/singles\//, '').sub(/\.yml$/, '').split('_-_')
     @repository = false
-    @repositories = YAML.load_file(File.join(Rake.original_dir, manifest))
+    @repositories = YAML.load_file(File.join(Rake.original_dir, manifest)).keys
   else
     @repository = true
     ary = manifest.sub(/^upstream\//, '').sub(/\.yml$/, '').split('_-_')
