@@ -3,7 +3,9 @@
 
 ckbks 'http://www.cookbooks.io'
 
-cookbook 'oc-chef-client'
+cookbook 'ss-chef-mysql'
 
-cookbook 'oc-apache2', '>= 1.0.0'
-cookbook 'oc-application_ruby', '> 1.0.0'
+cookbook 'ss-chef-rvm', '>= 0.8.0'
+cookbook 'oc-java'
+#cookbook 'oc-activemq'
+#cookbook 'ss-chef-gitorious'
