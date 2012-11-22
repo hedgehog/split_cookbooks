@@ -13,7 +13,7 @@ org: cookbooks
 
 To update all cookbooks:
   pushd /src/split_cookbooks/
-    bundle exec rake 2>&1|tee logs/update--$(date +%d-%m-%Y--%H-%M-%S).log
+    bundle exec rake --trace 2>&1|tee logs/update--$(date +%d-%m-%Y--%H-%M-%S).log
     bundle exec rake cdn --trace 2>&1|tee logs/cdn--$(date +%d-%m-%Y--%H-%M-%S).log
   popd
 
