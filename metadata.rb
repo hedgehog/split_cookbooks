@@ -34,6 +34,8 @@ class Chef
                   ::XZ::StreamReader.open(full_archive) do |txz|
                     ::Archive::Tar::Minitar.unpack(txz, '.')
                   end
+                else
+                  return metadata_processed
               end
               pp 'here'
               subtemps = pwd.children

@@ -136,7 +136,10 @@ class Site
     # to the exclusion list @skip_cookbook.
     def build_index
       puts "Building index:"
+      # FileUtils.cp(File.join(File.dirname(__FILE__),'s3-bucket-listing.html'), './index.html')
       @cookbook_index = {}
+      #root_index = 'index.html'
+      #@index[root_index] = ::Digest::MD5.file(root_index).to_s
       init_skip_cookbooks
       prev_path = false
       Dir['**/*'].each do |path|
@@ -157,7 +160,12 @@ class Site
           # - do not start `qa-` and do end `.json`
           if path[/\.json$/] || path[/(qa-.*)(\.tar\.xz$)/]
             puts "    #{path}"
-            @index[path] = ::Digest::MD5.file(path).to_s
+            md5_file = "#{path}.md5"
+            file_md5 = ::Digest::MD5.file(path).to_s
+            ::Pathname.new(md5_file).open('w') { |f| f.write(file_md5) }
+            md5_file_md5 = ::Digest::MD5.file(md5_file).to_s
+            @index[path] = file_md5
+            @index[md5_file] = md5_file_md5
           elsif (!path[/qa-/] && path[/\.tar\.gz$/]) || path[/\.zip$/]
             # Delete/cleanup files that:
             # - do not start `qa-` and do end `.taq.gz`
@@ -169,10 +177,13 @@ class Site
           end
           # Only `qa-` tags have metadata version information.
           # Don't Librarian-chef index files that:
+          # - do end `.html`
           # - do end `.json`
+          # - do end `.json.md5`
+          # - do end `.taq.xz.md5`
           # - do end `.zip`
           # - do not start `qa-` and do end `.taq.gz`
-          if !path[/\.zip$/] && !path[/\.json$/] && !(!path[/qa-/] && path[/\.tar\.gz$/])
+          if !path[/\.html$/] && !path[/\.zip$/] && !path[/\.json$/] && !path[/\.json\.md5$/] && !path[/\.tar\.xz\.md5$/] && !(!path[/qa-/] && path[/\.tar\.gz$/])
             append_cookbook_versions(path)
             build_cookbook_metadata(cookbook, path)
           end
@@ -187,6 +198,7 @@ class Site
     end
 
     def append_cookbook_versions(path)
+      puts "append to cookbook versions: #{path}"
       cookbook, file = path.split(/\//)
       case File.extname(file)
         when '.gz'
@@ -213,9 +225,13 @@ class Site
       end
     end
 
+    # This method is only invoked when path is a directory.
     def build_cookbook_index(path)
       cookbook, file = path.split(/\//)
+      #cookbook_html = File.join(path,'index.html')
       cookbook_json = "#{cookbook}.json"
+      cookbook_md5 = "#{cookbook_json}.md5"
+      #FileUtils.cp(File.join(File.dirname(__FILE__),'s3-bucket-listing.html'), cookbook_html)
       hsh = @cookbook_index[cookbook]
       puts "  Build index JSON: #{cookbook}"
       puts "    name: #{hsh[:name]}"
@@ -231,11 +247,17 @@ class Site
         puts "No 'versions' data: #{hsh}"
       end
       hsh[:versions].each do |ver|
-        puts "                 #{ver}"
+        puts "  #{ver}"
       end
       hsh['depends_name'] = @depends_name
       Pathname.new(cookbook_json).open('w') { |f| f.write(JSON.dump(hsh)) }
-      @index[cookbook_json] = ::Digest::MD5.file(cookbook_json).to_s
+      json_md5 = ::Digest::MD5.file(cookbook_json).to_s
+      Pathname.new(cookbook_md5).open('w') { |f| f.write(json_md5) }
+      md5_md5 = ::Digest::MD5.file(cookbook_md5).to_s
+      #html_md5 = ::Digest::MD5.file(cookbook_html).to_s
+      @index[cookbook_json] = json_md5
+      @index[cookbook_md5] = md5_md5
+      #@index[cookbook_html] = html_md5
     end
 
     class ::Version
@@ -274,6 +296,7 @@ class Site
     end
 
     def build_cookbook_metadata(name, path)
+      puts "build cookbook metadata: #{path}"
       case File.extname(path)
         when '.gz'
           filename  = File.basename(path, '.tar.gz')
