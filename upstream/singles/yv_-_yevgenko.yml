@@ -1,0 +1,5 @@
+cookbook-aegir:          aegir
+cookbook-dotdeb:         dotdeb
+cookbook-eaccelerator:   eaccelerator
+cookbook-magento:        magento
+cookbook-php-fpm:        php-fpm

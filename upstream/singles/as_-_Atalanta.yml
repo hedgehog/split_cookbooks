@@ -1,0 +1,5 @@
+chef-git:         chef-git
+chef-ips:         chef-ips
+chef-solaris:     chef-solaris
+chef-supervisord: chef-supervisord
+chef-users:       chef-users

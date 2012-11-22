@@ -1,0 +1,3 @@
+chef-kitchen:     kitchen
+chef-mongodb:     mongodb
+chef-solo-search: solo-search

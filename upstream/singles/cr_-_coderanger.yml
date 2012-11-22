@@ -1,0 +1,5 @@
+chef-collectd:         collectd
+chef-collectd_plugins: collectd_plugins
+chef-sentry-handler:   sentry-handler
+chef-supervisor:       supervisord
+chef-user:             user

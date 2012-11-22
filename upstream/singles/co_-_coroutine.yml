@@ -1,0 +1,17 @@
+chef-drbd:             drbd
+chef-elasticsearch:    elasticsearch
+chef-ganglia:          ganglia
+chef-god:              god
+chef-haproxy:          haproxy
+chef-hosts:            hosts
+chef-keepalived:       keepalived
+chef-kibana:           kibana
+chef-logstash:         logstash
+chef-monit:            monit
+chef-nginx_ssl_proxy:  nginx_ssl_proxy
+chef-postgresql:       postgresql
+chef-rabbitmq_cluster: rabbitmq_cluster
+chef-rails_apps:       rails_apps
+chef-supervisord:      supervisord
+chef-system_packages:  system_packages
+chef-users:            users

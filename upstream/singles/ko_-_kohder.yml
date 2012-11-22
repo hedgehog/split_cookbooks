@@ -1,0 +1,5 @@
+chef-aws:             aws
+chef-client:          client
+chef-hosts-awareness: hosts-awareness
+chef-lvm:             lvm
+chef-volumes:         volumes
