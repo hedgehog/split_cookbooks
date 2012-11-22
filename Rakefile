@@ -60,7 +60,7 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
 
             # check for existing tags
             git 'remote rm origin'
-            git "remote add cookbooks git@github.com:#{config['org']}/#{@abreviation}-#{cookbook}.git"
+            git "remote add cookbooks git@github.com-taqtiqa-mark:#{config['org']}/#{@abreviation}-#{cookbook}.git"
             git 'fetch cookbooks'
 
             # tag versions and archive tags
@@ -165,18 +165,35 @@ end
 def get(uri)
   sleep 1 # github api throttlin'
   headers = { 'Authorization' => "token #{config['token']}"}
-  JSON.parse(RestClient.get(uri, headers))
+  retries_left = 10
+  begin
+    response = RestClient::Request.execute(:method => :get, :url => uri, :headers => headers, :timeout => 10, :open_timeout => 10 )
+    @last_response = response
+    if response.kind_of? RestClient::ResourceNotFound
+      raise
+    end
+  rescue RestClient::Exception => e
+    if retries_left > 0
+      retries_left -= 1
+      puts e.inspect
+      puts "RETRYING GET #{uri}"
+      retry
+    else
+      raise
+    end
+  end
+  JSON.parse(response)
 end
 
 def upstream_clone
   Dir.chdir(Rake.original_dir) do |path|
     if @repository
       puts "  Cloning upstream #{@upstream}/#{@repository}.git to cookbooks"
-      git "clone --verbose --progress git://github.com/#{@upstream}/#{@repository}.git cookbooks"
+      git "clone --quiet git://github.com/#{@upstream}/#{@repository}.git cookbooks"
     else
       @repositories.each do |repo|
         puts "  Cloning upstream #{@upstream}/#{repo}.git to cookbooks/#{repo}"
-        git "clone --verbose --progress git://github.com/#{@upstream}/#{repo}.git cookbooks/#{repo}"
+        git "clone --quiet git://github.com/#{@upstream}/#{repo}.git cookbooks/#{repo}"
       end
     end
   end
