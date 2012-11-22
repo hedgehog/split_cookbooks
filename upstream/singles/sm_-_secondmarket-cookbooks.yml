@@ -1,0 +1,10 @@
+confluence:      confluence
+crowd:           crowd
+jira:            jira
+postgresql:      postgresql
+rhapache:        rhapache
+sm-postgresql:   sm-postgresql
+graphite:        graphite
+chef-server:     chef-server
+hipchat_handler: hipchat_handler
+mongodb:         mongodb

@@ -1,0 +1,9 @@
+gerrit:               gerrit
+gitweb:               gitweb
+git-daemon:           git-daemon
+locales:              locales
+etherpad-lite:        etherpad-lite
+npm:                  npm
+otrs:                 otrs
+ssl_certificates:     ssl_certificates
+zabbix-custom-checks: zabbix-custom-checks

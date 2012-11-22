@@ -1,0 +1,12 @@
+editor:     editor
+dotfiles:   dotfiles
+deployer:   deployer
+known_host: known_host
+database:   database
+sudo:       sudo
+mysql:      mysql
+users:      users
+user:       user
+tmux:       tmux
+nginx:      nginx
+ariadne:    ariadne

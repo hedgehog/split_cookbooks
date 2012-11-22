@@ -1,0 +1,5 @@
+chef-percona:         percona
+sensu:                sensu
+graphite:             graphite
+locale:               locale
+cookbook-certificate: certificate

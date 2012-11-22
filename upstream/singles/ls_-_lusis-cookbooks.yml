@@ -1,0 +1,7 @@
+supervisord:     supervisord
+noah:            noah
+motd:            motd
+databag_decrypt: databag_decrypt
+voldemort:       voldemort
+s3client:        s3client
+rpmbuild:        rpmbuild
