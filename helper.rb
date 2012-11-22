@@ -100,13 +100,12 @@ class Site
     end
 
     def signed_url
-      bucket = @site.domain_name
-      puts "Using bucket: #{bucket}"
-      expires_at = Time.now + (24 * 60 * 60)
-      site_path = "/" # This returns https://s3.amazonaws.com/alpha.taqtiqa.com/
-      signed_url = connection.directories.get(bucket).files.get_https_url(site_path, expires_at)
-      puts "Signed URL (24hrs (#{expires_at}): #{signed_url}"
-
+      #bucket = @site.domain_name
+      #puts "Using bucket: #{bucket}"
+      #expires_at = Time.now + (24 * 60 * 60)
+      #site_path = "/" # This returns https://s3.amazonaws.com/alpha.taqtiqa.com/
+      #signed_url = connection.directories.get(bucket).files.get_https_url(site_path, expires_at)
+      #puts "Signed URL (24hrs (#{expires_at}): #{signed_url}"
     end
 
     def validate
@@ -237,15 +236,22 @@ class Site
       puts "    name: #{hsh[:name]}"
       puts "    # versions: #{hsh[:versions].size}"
       if hsh[:versions]
-        puts "Sorted 'versions' data:"
         list = []
         hsh[:versions].each do |v|
           list.push(::Version.new(v))
         end
+        begin
         hsh[:versions] = list.sort
+        rescue => e
+          puts e.inspect
+          puts path.inspect
+          puts hsh
+        end
+
       else
         puts "No 'versions' data: #{hsh}"
       end
+      puts "Sorted 'versions' data:"
       hsh[:versions].each do |ver|
         puts "  #{ver}"
       end
@@ -269,7 +275,7 @@ class Site
       def initialize(str="")
         @lead, @prefix, version, @suffix = str.split(/^(.*qa-)(.*)(\.json)/)
         v = version.split(".")
-        @major = v[0].to_i
+        @major = v[0].to_i if v[0][/^\d+/]
         @feature_group = v[1].to_i if v.size >= 2
         @feature = v[2].to_i if v.size >= 3
         @bugfix = v[3].to_i if v.size >= 4
@@ -462,29 +468,29 @@ class Site
       # see for example
       # yumrepo:  https://tickets.opscode.com/browse/CHEF-2326
       @skip_cookbooks ||= [
-        'ap-cookbook-yumrepo/qa-0.0.1.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.0.2.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.0.3.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.0.4.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.0.6.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.0.8.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.10.0.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.10.1.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.11.0.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.11.1.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.11.2.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.12.0.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.12.4.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.16.2.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.16.3.tar.gz',
-        'ap-cookbook-yumrepo/qa-0.16.4.tar.gz',
-        'mc-hostname/qa-0.0.2.tar.gz',
-        'mc-hostname/qa-0.2.2.tar.gz',
-        'oc-chef/qa-0.15.0.tar.gz',
-        'oc-chef/qa-0.19.0.tar.gz',
-        'rs-repo_git/qa-0.1.0.tar.gz',
-        'rs-rs_utils/qa-0.1.0.tar.gz',
-        'rs-web_apache/qa-0.1.0.tar.gz'
+        'ap-cookbook-yumrepo/qa-0.0.1.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.0.2.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.0.3.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.0.4.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.0.6.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.0.8.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.10.0.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.10.1.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.11.0.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.11.1.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.11.2.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.12.0.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.12.4.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.16.2.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.16.3.tar.xz',
+        'ap-cookbook-yumrepo/qa-0.16.4.tar.xz',
+        'mc-hostname/qa-0.0.2.tar.xz',
+        'mc-hostname/qa-0.2.2.tar.xz',
+        'oc-chef/qa-0.15.0.tar.xz',
+        'oc-chef/qa-0.19.0.tar.xz',
+        'rs-repo_git/qa-0.1.0.tar.xz',
+        'rs-rs_utils/qa-0.1.0.tar.xz',
+        'rs-web_apache/qa-0.1.0.tar.xz'
       ]
     end
   end
