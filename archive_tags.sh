@@ -45,6 +45,10 @@ pushd ${REPO_DIR}
           [[ $DEBUG ]] && echo "Not a qa- tag..."
           continue
       fi
+      if [[ ! "$ref" =~ ^refs/tags/qa-[[:digit:]] ]] ; then
+          [[ $DEBUG ]] && echo "Not a valid qa- tag..."
+          continue
+      fi
 
       # Get tag name
       tag=${ref##*/}
