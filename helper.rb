@@ -206,7 +206,11 @@ class Site
           tag = "#{File.basename(file,'.tar.xz')}.json"
       end
       puts "     cookbook: #{cookbook} file: #{tag}"
-      @cookbook_index[cookbook][:versions] << "http://www.cookbooks.io/#{cookbook}/#{tag}"
+      #@cookbook_index[cookbook][:versions] << "http://www.cookbooks.io/#{cookbook}/#{tag}"
+      ver = tag.delete!('qa-')
+      if ver
+        @cookbook_index[cookbook][:versions] << ver
+      end
     end
 
     def extract_version(file, ext = '.xz')
@@ -273,7 +277,14 @@ class Site
       attr_reader :major, :feature_group, :feature, :bugfix
 
       def initialize(str="")
-        @lead, @prefix, version, @suffix = str.split(/^(.*qa-)(.*)(\.json)/)
+        if str[/qa-/]
+          @lead, @prefix, version, @suffix = str.split(/^(.*qa-)(.*)(\.json)/)
+        else
+          @lead   = ''
+          @prefix = ''
+          @suffix = ''
+          version = str
+        end
         v = version.split(".")
         @major = v[0].to_i if v[0][/^\d+/]
         @feature_group = v[1].to_i if v.size >= 2
