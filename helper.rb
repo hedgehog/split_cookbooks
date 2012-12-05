@@ -346,7 +346,7 @@ class Site
                 'depends_name' => md.depends_name,
                 'version' => md.version,
                 #'file' => "http://www.cookbooks.io/#{archive.to_s}",
-                'file' => archive.to_s
+                'file' => archive.to_s,
                 'dependencies' => md.dependencies}
       man
     end
