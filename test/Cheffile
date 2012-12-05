@@ -7,5 +7,6 @@ cookbook 'ss-chef-mysql'
 
 cookbook 'ss-chef-rvm', '>= 0.8.0'
 cookbook 'oc-java'
-#cookbook 'oc-activemq'
+cookbook 'oc-runit'
+cookbook 'oc-activemq'
 #cookbook 'ss-chef-gitorious'
