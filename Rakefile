@@ -41,10 +41,9 @@ def cookbook_list(manifest='upstream/oc_-_opscode_-_cookbooks.yml', scope='all')
             git "clone --quiet --no-hardlinks cookbooks tmp/#{@abreviation}-#{cookbook}"
           end
           tmp_ckbk_dir = "#{Rake.original_dir}/tmp/#{@abreviation}-#{cookbook}"
-          puts File.directory?(tmp_ckbk_dir)
           Dir.chdir(tmp_ckbk_dir) do
-            $stdout.puts `pwd`
             $stdout.puts "  Extracting #{cookbook}"
+            $stdout.puts "    Working dir: #{`pwd`}"
             if @singles
             else
               if @folder

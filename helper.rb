@@ -155,24 +155,18 @@ class Site
           # - do not start `qa-` and do end `.json` i.e. the root <cookbook>.json files
           # - do not start `qa-` and do end `.json.md5` i.e. the root <cookbook>.json.md5 files
           if path[/^((?!qa-).*\.json$)/] || path[/(qa-.*)(\.json\.xz$)/] || path[/(qa-.*)(\.tar\.xz$)/]
-            md5_file = "#{path}.md5"
-            file_md5 = ::Digest::MD5.file(path).to_s
-            ::Pathname.new(md5_file).open('w') { |f| f.write(file_md5) }
-            md5_file_md5 = ::Digest::MD5.file(md5_file).to_s
-            puts "    s3 index #{path}"
-            @index[path] = file_md5
-            puts "    s3 index #{md5_file}"
-            @index[md5_file] = md5_file_md5
-          end
-          if path[/^((?!qa-).*\.tar\.gz$)/] || path[/\.zip$/] || path[/((\.md5\.md5)+)/] || path[/((\.html\.md5)+)/]
-            # Delete/cleanup files that:
-            # - end with multiple md5 extensions
-            # - do not start `qa-` and do end `.taq.gz`
-            # - do start `qa-` and do end `.tar.gz`
-            # - do end `.zip`
-            if File.exist?(path)
-              puts "      cleaning up: #{path}"
-              FileUtils.rm(path)
+            if path[/((\/qa-).*\.json$)/]
+              puts "       skip s3 index #{path}"
+            else
+              md5_file = "#{path}.md5"
+              file_md5 = ::Digest::MD5.file(path).to_s
+              ::Pathname.new(md5_file).open('w') { |f| f.write(file_md5) }
+              md5_file_md5 = ::Digest::MD5.file(md5_file).to_s
+              #puts "       What matched to get here? #{path[/^((?!qa-).*\.json$)/]} #{path[/(qa-.*)(\.json\.xz$)/]} #{path[/(qa-.*)(\.tar\.xz$)/]}"
+              puts "    s3 index #{path}"
+              @index[path] = file_md5
+              puts "    s3 index #{md5_file}"
+              @index[md5_file] = md5_file_md5
             end
           end
           # Only `qa-` tags have metadata version information.
@@ -188,6 +182,18 @@ class Site
           if !path[/\.html$/] && !path[/\.html\.md5$/] && !path[/\.json.xz$/] && !path[/\.md5\.md5/] && !path[/\.json.xz.md5$/] && !path[/\.zip$/] && !path[/\.json$/] && !path[/\.json\.md5$/] && !path[/\.tar\.xz\.md5$/] && !(!path[/qa-/] && path[/\.tar\.gz$/])
             append_cookbook_versions(path)
             build_cookbook_metadata(cookbook, path)
+          end
+          # Clean up files that legacy or just redundant.
+          if path[/(qa-.*)(\.json$)/] || path[/(qa-.*)(\.json.md5$)/] || path[/^((?!qa-).*\.tar\.gz$)/] || path[/\.zip$/] || path[/((\.md5\.md5)+)/] || path[/((\.html\.md5)+)/]
+            # Delete/cleanup files that:
+            # - end with multiple md5 extensions
+            # - do not start `qa-` and do end `.taq.gz`
+            # - do start `qa-` and do end `.tar.gz`
+            # - do end `.zip`
+            if File.exist?(path)
+              puts "       cleaning up: #{path}"
+              FileUtils.rm(path)
+            end
           end
         end
       end
@@ -208,10 +214,10 @@ class Site
         when '.xz'
           tag = "#{File.basename(file,'.tar.xz')}.json"
       end
-      puts "     cookbook: #{cookbook} file: #{tag}"
       #@cookbook_index[cookbook][:versions] << "http://www.cookbooks.io/#{cookbook}/#{tag}"
       ver = tag.delete!('qa-')
       if ver
+        puts "     cookbook/file: #{cookbook}/#{tag} appending ver: #{ver}"
         @cookbook_index[cookbook][:versions] << ver
       end
     end
@@ -348,7 +354,7 @@ class Site
       end
       md.name(name)
       md.from_archive(archive.to_s, 'metadata.rb')
-      pp man = {'name' => md.name,
+      man = {'name' => md.name,
                 'depends_name' => md.depends_name,
                 'version' => md.version,
                 #'file' => "http://www.cookbooks.io/#{archive.to_s}",
