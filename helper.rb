@@ -11,11 +11,6 @@ end
 # is a simple data structure, which is deployed with a `FogSite::Deployer`
 #
 module MetaDataSingletonMethods
-
-  def depends_name(name)
-    @depends_name = name
-  end
-
   def depends_name
     @depends_name
   end
