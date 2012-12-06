@@ -1,0 +1,30 @@
+name 'cats'
+version '1.9.0'
+description 'A fancy cookbook that manages a herd of cats!'
+maintainer 'Adam Jacob'
+maintainer_email 'adam@example.com'
+
+depends 'mutts'
+depends 'dogs', '> 1.0'
+depends 'birds', '>= 1.0'
+depends 'birds', '< 4.0'
+
+conflicts 'puppies'
+conflicts 'dogs', '> 2.0'
+conflicts 'birds', '> 2.0'
+conflicts 'birds', '< 4.0'
+
+recommends 'cheetahs'
+recommends 'lions', '> 1.0'
+recommends 'leopards', '> 1.0'
+recommends 'leopards', '< 4.0'
+
+replaces 'cat'
+replaces 'moggies', '> 1.0'
+replaces 'kittens', '> 1.0'
+replaces 'kittens', '< 4.0'
+
+suggests 'fleas'
+suggests 'mice', '> 1.0'
+suggests 'litter', '> 1.0'
+suggests 'litter', '< 4.0'

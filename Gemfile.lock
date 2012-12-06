@@ -33,7 +33,7 @@ GEM
     coderay (1.0.8)
     erubis (2.7.0)
     excon (0.9.6)
-    fakefs (0.4.1)
+    fakefs (0.4.2)
     ffi (1.2.0)
     fog (1.1.2)
       builder

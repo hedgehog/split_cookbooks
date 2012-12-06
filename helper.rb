@@ -156,21 +156,27 @@ class Site
           # Rakefile task only tags as qa- those with version metadata.
           # Index for S3 upload files that:
           # - do start `qa-` and do end `.tar.xz`
-          # - do not start `qa-` and do end `.json`
-          if path[/\.json$/] || path[/(qa-.*)(\.tar\.xz$)/]
-            puts "    #{path}"
+          # - do start `qa-` and do end `.json.xz`
+          # - do not start `qa-` and do end `.json` i.e. the root <cookbook>.json files
+          # - do not start `qa-` and do end `.json.md5` i.e. the root <cookbook>.json.md5 files
+          if path[/^((?!qa-).*\.json$)/] || path[/(qa-.*)(\.json\.xz$)/] || path[/(qa-.*)(\.tar\.xz$)/]
             md5_file = "#{path}.md5"
             file_md5 = ::Digest::MD5.file(path).to_s
             ::Pathname.new(md5_file).open('w') { |f| f.write(file_md5) }
             md5_file_md5 = ::Digest::MD5.file(md5_file).to_s
+            puts "    s3 index #{path}"
             @index[path] = file_md5
+            puts "    s3 index #{md5_file}"
             @index[md5_file] = md5_file_md5
-          elsif (!path[/qa-/] && path[/\.tar\.gz$/]) || path[/\.zip$/]
+          end
+          if path[/^((?!qa-).*\.tar\.gz$)/] || path[/\.zip$/] || path[/((\.md5\.md5)+)/] || path[/((\.html\.md5)+)/]
             # Delete/cleanup files that:
+            # - end with multiple md5 extensions
             # - do not start `qa-` and do end `.taq.gz`
             # - do start `qa-` and do end `.tar.gz`
             # - do end `.zip`
             if File.exist?(path)
+              puts "      cleaning up: #{path}"
               FileUtils.rm(path)
             end
           end
@@ -179,10 +185,12 @@ class Site
           # - do end `.html`
           # - do end `.json`
           # - do end `.json.md5`
+          # - do end `.json.xz.md5`
+          # - do end `.json.md5`
           # - do end `.taq.xz.md5`
           # - do end `.zip`
           # - do not start `qa-` and do end `.taq.gz`
-          if !path[/\.html$/] && !path[/\.zip$/] && !path[/\.json$/] && !path[/\.json\.md5$/] && !path[/\.tar\.xz\.md5$/] && !(!path[/qa-/] && path[/\.tar\.gz$/])
+          if !path[/\.html$/] && !path[/\.html\.md5$/] && !path[/\.json.xz$/] && !path[/\.md5\.md5/] && !path[/\.json.xz.md5$/] && !path[/\.zip$/] && !path[/\.json$/] && !path[/\.json\.md5$/] && !path[/\.tar\.xz\.md5$/] && !(!path[/qa-/] && path[/\.tar\.gz$/])
             append_cookbook_versions(path)
             build_cookbook_metadata(cookbook, path)
           end
@@ -325,6 +333,9 @@ class Site
       hsh = compile_manifest(name, path)
       # Set depends name to be written to cookbook index file
       @depends_name = hsh['depends_name']
+      XZ::StreamWriter.open("#{metadata_json}.xz") do |file|
+        file.write(JSON.dump(hsh))
+      end
       ::Pathname.new(metadata_json).open('wb') { |f| f.write(JSON.dump(hsh)) }
     end
 
@@ -347,7 +358,7 @@ class Site
                 'version' => md.version,
                 #'file' => "http://www.cookbooks.io/#{archive.to_s}",
                 'file' => archive.to_s,
-                'dependencies' => md.dependencies}
+                'metadata' => md.to_json}
       man
     end
 

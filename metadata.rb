@@ -24,7 +24,6 @@ class Chef
             # use the directory...
             Dir.chdir(dir) do |fldr|
               pwd = Pathname(fldr).expand_path
-              pp 'now'
               pp pwd
               case File.extname(archive)
                 when '.gz'
@@ -37,11 +36,13 @@ class Chef
                 else
                   return metadata_processed
               end
-              pp 'here'
               subtemps = pwd.children
               subtemps.empty? and raise "The package archive was empty!"
               subtemps.delete_if{|pth| pth.to_s[/pax_global_header/]}
-              subtemps.size > 1 and raise "The package archive has too many children!"
+              if subtemps.size > 1
+                puts subtemps.inspect
+                raise "The package archive has too many children!"
+              end
               @destination = subtemps.first.basename.to_s
               pp "Cookbook: #{} Depends name: #{@destination}"
               Dir.chdir("#{@destination}") do |dr|
